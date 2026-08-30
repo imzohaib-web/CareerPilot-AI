@@ -26,3 +26,6 @@ QWEN_MODEL = os.getenv("ALIBABA_CLOUD_MODEL", os.getenv("QWEN_MODEL", "qwen-plus
 # --- CORS (comma-separated list of allowed frontend origins) ---
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 CORS_ORIGINS = [origin.strip() for origin in FRONTEND_ORIGIN.split(",") if origin.strip()]
+
+# --- Resume upload ---
+RESUME_MAX_SIZE_BYTES = int(os.getenv("RESUME_MAX_SIZE_MB", "5")) * 1024 * 1024

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app import config
 from app.database.mongodb import close_db, connect_db, get_db
-from app.routes import ai, auth, profile
+from app.routes import ai, auth, profile, resume
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(ai.router)
+app.include_router(resume.router)
 
 
 @app.get("/api/health")
