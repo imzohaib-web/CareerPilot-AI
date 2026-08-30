@@ -21,7 +21,7 @@ CareerPilot AI — an AI career-readiness platform for students: resume analysis
 
 ## Current development day
 
-Day 1 — 29 August (Foundation + architecture + AI connection)
+Day 1 — 29 August 2026 (Foundation + architecture + AI connection)
 
 ## Completed work
 
@@ -29,27 +29,33 @@ Day 1 — 29 August (Foundation + architecture + AI connection)
 - Full documentation/context system (`docs/`)
 - Qoder rules + 5 Agent Skill contracts
 - Backend & frontend scaffolds on `dev` branch
+- Day 1 backend foundation: CORS, Motor MongoDB lifecycle, routers `/api/auth`, `/api/profile`, `/api/ai`
+- Authentication: bcrypt hashing (passlib removed), JWT (python-jose), register/login/me
+- Career Profile: GET/POST/PUT on `career_profiles`, per-user isolation via JWT
+- Qwen connectivity: `services/ai/qwen_service.py` (Alibaba Cloud Model Studio OpenAI-compatible workspace endpoint) + `POST /api/ai/test` — live-verified with model `qwen3.7-plus`
+- Frontend: axios API client + interceptors, AuthContext, Login/Register/Profile/AI-Test pages, protected routes — full browser E2E passed (8/8)
 
 ## Current task
 
-Day 1: wire MongoDB + auth + career profile + Qwen connection + frontend API client.
+Day 1 COMPLETE. Next: Day 2 — Resume Analyzer.
 
 ## Key decisions
 
 - Single FastAPI backend (no Node backend, no microservices)
 - Qwen only through backend; outputs validated
+- bcrypt used directly (passlib 1.7.4 incompatible with bcrypt 5)
+- Qwen via Alibaba Cloud Model Studio OpenAI-compatible endpoint; model/base URL env-configurable (`ALIBABA_CLOUD_MODEL`, `ALIBABA_CLOUD_BASE_URL`)
+- `backend/.env` is loaded by absolute path so the backend starts from any working directory
 - MCP & RAG are optional, post-MVP
 - Cut order under pressure: BONUS → SHOULD HAVE → never MUST HAVE
 
 ## Known issues
 
-- `frontend/src/App.tsx` is still the Vite starter template — replace with real UI
-- No `.env` values committed; developer must populate `backend/.env`
-- MongoDB connection and AI service not yet implemented
+- None blocking. Root has two untracked E2E screenshot artifacts (`e2e-step3-profile-saved.png`, `e2e-step6-qwen-response.png`) — safe to delete
 
 ## Next task
 
-Implement backend foundation (Day 1 checklist in `docs/DEVELOPMENT_PLAN.md`).
+Day 2 — Resume Analyzer (`docs/DEVELOPMENT_PLAN.md`).
 
 ## Team
 

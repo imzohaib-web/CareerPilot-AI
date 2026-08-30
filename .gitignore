@@ -1,7 +1,13 @@
 node_modules
 __pycache__/
 *.pyc
+# Never commit environment/secret files of any name
 .env
+.env.*
+*.env
+# Keep committed example files
+!backend/.env.example
+!frontend/.env.example
 venv/
 .venv/
 dist/

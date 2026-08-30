@@ -8,17 +8,17 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | /api/auth/register | PLANNED | Create account (email, password) |
-| POST | /api/auth/login | PLANNED | Authenticate, return JWT |
-| GET | /api/auth/me | PLANNED | Current user from token |
+| POST | /api/auth/register | IMPLEMENTED | Create account (email, password) |
+| POST | /api/auth/login | IMPLEMENTED | Authenticate, return JWT |
+| GET | /api/auth/me | IMPLEMENTED | Current user from token |
 
 ## PROFILE
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | /api/profile | PLANNED | Create career profile |
-| GET | /api/profile | PLANNED | Read career profile |
-| PUT | /api/profile | PLANNED | Update career profile |
+| POST | /api/profile | IMPLEMENTED | Create career profile |
+| GET | /api/profile | IMPLEMENTED | Read career profile |
+| PUT | /api/profile | IMPLEMENTED | Update career profile |
 
 ## RESUME
 
@@ -59,7 +59,7 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | /api/ai/test | PLANNED | Verify Qwen connectivity |
+| POST | /api/ai/test | IMPLEMENTED | Verify Qwen connectivity |
 
 ## Cross-Cutting Conventions
 
