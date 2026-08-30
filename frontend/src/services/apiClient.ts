@@ -53,6 +53,12 @@ export function describeApiError(error: unknown): {
     if (status === 409) {
       return { category: 'validation', message: detail ?? 'Conflict with existing data.' }
     }
+    if (status === 400) {
+      return { category: 'validation', message: detail ?? 'Invalid request. Please check your input.' }
+    }
+    if (status === 413) {
+      return { category: 'validation', message: detail ?? 'File is too large.' }
+    }
     if (status === 422) {
       return { category: 'validation', message: detail ?? 'Please check the form input.' }
     }

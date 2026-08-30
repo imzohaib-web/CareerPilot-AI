@@ -45,3 +45,53 @@ export interface HealthResponse {
   status: string
   database: string
 }
+
+// ── Resume Analyzer ──────────────────────────────────────────────────────
+
+export interface ResumeEducation {
+  institution: string
+  degree: string
+  field_of_study: string
+  year: string
+}
+
+export interface ResumeExperience {
+  company: string
+  role: string
+  duration: string
+  description: string
+}
+
+export interface ResumeProject {
+  name: string
+  description: string
+  technologies: string[]
+}
+
+export interface ResumeSections {
+  education: ResumeEducation[]
+  experience: ResumeExperience[]
+  projects: ResumeProject[]
+  certifications: string[]
+}
+
+export interface ResumeAnalysis {
+  score: number
+  summary: string
+  strengths: string[]
+  weaknesses: string[]
+  missing_info: string[]
+  improvements: string[]
+  skills_detected: string[]
+  sections: ResumeSections
+}
+
+export interface ResumeAnalysisResponse {
+  id: string
+  user_id: string
+  filename: string
+  extracted_text_length: number
+  analysis: ResumeAnalysis
+  analyzed_at: string
+  model: string
+}
