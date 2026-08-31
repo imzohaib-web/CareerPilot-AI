@@ -33,11 +33,16 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-async def chat(user_message: str, system_prompt: str | None = None) -> tuple[str, str]:
+async def chat(
+    user_message: str,
+    system_prompt: str | None = None,
+    temperature: float | None = None,
+) -> tuple[str, str]:
     """Send a single-turn message to Qwen.
 
     Returns ``(reply_text, model)``. Raises ``AIServiceError`` on any
-    provider failure.
+    provider failure.  An optional *temperature* overrides the provider
+    default (useful for deterministic structured-output prompts).
     """
     client = _get_client()
     messages = []
@@ -45,12 +50,16 @@ async def chat(user_message: str, system_prompt: str | None = None) -> tuple[str
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": user_message})
 
+    kwargs: dict = {
+        "model": config.QWEN_MODEL,
+        "messages": messages,
+        "timeout": 60.0,
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
     try:
-        completion = await client.chat.completions.create(
-            model=config.QWEN_MODEL,
-            messages=messages,
-            timeout=60.0,
-        )
+        completion = await client.chat.completions.create(**kwargs)
     except OpenAIError as exc:
         # Log details server-side; never expose provider internals to clients.
         logger.error("Qwen request failed: %s", exc)

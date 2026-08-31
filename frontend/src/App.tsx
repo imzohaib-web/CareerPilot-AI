@@ -7,6 +7,7 @@ import { AiTestPage } from './pages/AiTestPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResumeAnalyzerPage } from './pages/ResumeAnalyzerPage'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
             }
           >
             <Route path="/" element={<ProfilePage />} />
+            <Route path="/resume" element={<ResumeAnalyzerPage />} />
             <Route path="/ai-test" element={<AiTestPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

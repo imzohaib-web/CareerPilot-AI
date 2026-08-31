@@ -1,0 +1,168 @@
+"""AI Resume Analyzer — structured Qwen analysis of extracted resume text.
+
+This module lives inside ``app/services/ai`` so all LLM interactions stay
+isolated. It reuses the shared ``qwen_service.chat()`` client and never
+creates a second provider connection.
+
+Output trust policy (per AI_ARCHITECTURE.md):
+  Generated → Parsed → Schema validated → Business validated → returned.
+"""
+
+import json
+import logging
+import re
+
+from pydantic import ValidationError
+
+from app.schemas.resume import ResumeAnalysis
+from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
+
+logger = logging.getLogger(__name__)
+
+# ── Prompt ────────────────────────────────────────────────────────────────
+
+RESUME_ANALYSIS_SYSTEM_PROMPT = """\
+You are CareerPilot AI, an expert resume analyst for students and \
+early-career developers. You analyze resumes with precision and honesty.
+
+RULES:
+- Analyze ONLY information explicitly present in the resume text.
+- NEVER invent, assume, or hallucinate qualifications, skills, companies, \
+degrees, projects, certifications, or achievements.
+- Clearly distinguish MISSING information from NEGATIVE information.
+- If a section (e.g. projects, certifications) is not present, return an \
+empty array — do not fabricate entries.
+- Provide actionable, specific improvement suggestions.
+- The score must reflect ATS compatibility and overall job-readiness for \
+entry-level / early-career roles (0 = very weak, 100 = excellent).
+
+OUTPUT FORMAT — return ONLY valid JSON (no markdown, no code fences, no \
+commentary before or after the JSON object):
+
+{
+  "score": <integer 0-100>,
+  "summary": "<one-paragraph summary of the resume>",
+  "strengths": ["<strength 1>", "<strength 2>", ...],
+  "weaknesses": ["<weakness 1>", "<weakness 2>", ...],
+  "missing_info": ["<missing item 1>", ...],
+  "improvements": ["<actionable suggestion 1>", ...],
+  "skills_detected": ["<skill 1>", "<skill 2>", ...],
+  "sections": {
+    "education": [
+      {"institution": "", "degree": "", "field_of_study": "", "year": ""}
+    ],
+    "experience": [
+      {"company": "", "role": "", "duration": "", "description": ""}
+    ],
+    "projects": [
+      {"name": "", "description": "", "technologies": []}
+    ],
+    "certifications": ["<certification 1>", ...]
+  }
+}
+"""
+
+# Low temperature for deterministic structured output.
+_ANALYSIS_TEMPERATURE = 0.2
+
+# Hard cap on resume text sent to the model (tokens cost money).
+_MAX_TEXT_CHARS = 15_000
+
+
+# ── Public API ────────────────────────────────────────────────────────────
+
+
+async def analyze_resume(extracted_text: str) -> tuple[ResumeAnalysis, str]:
+    """Run a structured Qwen analysis on *extracted_text*.
+
+    Returns ``(analysis, model_name)``.
+
+    Raises ``AIServiceError`` on provider failures or repeated validation
+    failures (the caller maps that to an HTTP 502).
+    """
+    if not extracted_text or not extracted_text.strip():
+        raise AIServiceError("No resume text provided for analysis")
+
+    # Truncate overly long resumes to stay within token limits.
+    user_text = extracted_text.strip()
+    if len(user_text) > _MAX_TEXT_CHARS:
+        user_text = user_text[:_MAX_TEXT_CHARS]
+
+    user_message = f"Analyze the following resume text:\n\n{user_text}"
+
+    # First attempt
+    analysis, model = await _call_and_parse(user_message)
+    if analysis is not None:
+        return analysis, model
+
+    # Retry once with a corrective nudge (per output-trust policy).
+    logger.warning("Resume analysis validation failed on first attempt; retrying with corrective prompt")
+    corrective = (
+        user_message
+        + "\n\nIMPORTANT: Your previous response was not valid JSON. "
+        "Return ONLY the JSON object as specified — no markdown, no code fences."
+    )
+    analysis, model = await _call_and_parse(corrective)
+    if analysis is None:
+        raise AIServiceError("AI returned an unparseable resume analysis after retry")
+
+    return analysis, model
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────
+
+
+async def _call_and_parse(
+    user_message: str,
+) -> tuple[ResumeAnalysis | None, str]:
+    """Call Qwen, parse JSON, validate schema. Returns (analysis|None, model)."""
+    try:
+        reply, model = await qwen_chat(
+            user_message,
+            system_prompt=RESUME_ANALYSIS_SYSTEM_PROMPT,
+            temperature=_ANALYSIS_TEMPERATURE,
+        )
+    except AIServiceError:
+        raise
+
+    raw_json = _extract_json(reply)
+    if raw_json is None:
+        logger.warning("Could not extract JSON from Qwen response: %s", reply[:200])
+        return None, model
+
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        logger.warning("Qwen JSON parse error: %s — snippet: %s", exc, raw_json[:200])
+        return None, model
+
+    try:
+        analysis = ResumeAnalysis.model_validate(data)
+    except ValidationError as exc:
+        logger.warning("Resume analysis schema validation failed: %s", exc)
+        return None, model
+
+    # Business validation: clamp score just in case (Pydantic ge/le already set).
+    return analysis, model
+
+
+def _extract_json(text: str) -> str | None:
+    """Extract the first JSON object from *text*, tolerating markdown fences."""
+    # Strip markdown code fences if present.
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove opening fence (```json or ```) and closing fence.
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```\s*$", "", stripped)
+
+    # Try direct parse first.
+    if stripped.startswith("{"):
+        return stripped
+
+    # Fallback: find first { ... last }.
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+
+    return None

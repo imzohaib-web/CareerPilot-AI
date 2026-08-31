@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 
 const NAV_LINKS = [
   { to: '/', label: 'Career Profile' },
+  { to: '/resume', label: 'Resume' },
   { to: '/ai-test', label: 'AI Test' },
 ]
 
