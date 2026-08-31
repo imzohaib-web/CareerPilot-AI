@@ -21,7 +21,7 @@ CareerPilot AI — an AI career-readiness platform for students: resume analysis
 
 ## Current development day
 
-Day 1 — 29 August 2026 (Foundation + architecture + AI connection)
+Day 2 — 30 August 2026 (Resume Analyzer)
 
 ## Completed work
 
@@ -34,10 +34,11 @@ Day 1 — 29 August 2026 (Foundation + architecture + AI connection)
 - Career Profile: GET/POST/PUT on `career_profiles`, per-user isolation via JWT
 - Qwen connectivity: `services/ai/qwen_service.py` (Alibaba Cloud Model Studio OpenAI-compatible workspace endpoint) + `POST /api/ai/test` — live-verified with model `qwen3.7-plus`
 - Frontend: axios API client + interceptors, AuthContext, Login/Register/Profile/AI-Test pages, protected routes — full browser E2E passed (8/8)
+- Day 2 Resume Analyzer: PDF upload + validation (extension, magic bytes, size, PyMuPDF extraction), structured Qwen analysis with retry, Pydantic validation, MongoDB persistence, full results UI — 31 backend tests pass, frontend tsc/lint/build clean, 35/35 live E2E checks pass
 
 ## Current task
 
-Day 1 COMPLETE. Next: Day 2 — Resume Analyzer.
+Day 2 COMPLETE. Next: Day 3 — Skill Gap + Personalized Roadmap.
 
 ## Key decisions
 
@@ -55,7 +56,7 @@ Day 1 COMPLETE. Next: Day 2 — Resume Analyzer.
 
 ## Next task
 
-Day 2 — Resume Analyzer (`docs/DEVELOPMENT_PLAN.md`).
+Day 3 — Skill Gap + Personalized Roadmap (`docs/DEVELOPMENT_PLAN.md`).
 
 ## Team
 

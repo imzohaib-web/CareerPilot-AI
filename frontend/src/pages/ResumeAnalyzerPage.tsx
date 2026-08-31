@@ -34,11 +34,17 @@ export function ResumeAnalyzerPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [result, setResult] = useState<ResumeAnalysisResponse | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Load previous analysis on mount
   const loadLatest = useCallback(async () => {
-    const prev = await resumeService.fetchLatestResume()
-    if (prev) setResult(prev)
+    try {
+      setLoadError(null)
+      const prev = await resumeService.fetchLatestResume()
+      if (prev) setResult(prev)
+    } catch (err) {
+      setLoadError(describeApiError(err).message)
+    }
   }, [])
 
   useEffect(() => {
@@ -157,6 +163,13 @@ export function ResumeAnalyzerPage() {
           </div>
         )}
       </div>
+
+      {/* Warning when previous analysis could not be loaded */}
+      {loadError && !result && (
+        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          Could not load your previous analysis: {loadError}
+        </div>
+      )}
 
       {/* Results */}
       {result && <AnalysisResults result={result} />}

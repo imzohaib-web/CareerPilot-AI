@@ -29,7 +29,9 @@ async def upload_and_analyze(
             detail=str(exc),
         )
 
-    # 2. AI analysis + MongoDB persistence
+    # 2. AI analysis + MongoDB persistence.
+    #    AIServiceError (Qwen failure) → 502.
+    #    Any other unexpected error falls through to the global handler (500).
     try:
         return await resume_service.upload_and_analyze(
             user_id=str(current_user["_id"]),
@@ -39,11 +41,6 @@ async def upload_and_analyze(
     except AIServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        )
-    except resume_service.ResumeValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
 
