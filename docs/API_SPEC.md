@@ -24,8 +24,8 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | /api/resume/upload | PLANNED | Upload resume (validated PDF/text) |
-| POST | /api/resume/analyze | PLANNED | Run AI resume analysis |
+| POST | /api/resume/analyze | IMPLEMENTED | Upload PDF + AI analysis (combined upload/analyze) |
+| GET | /api/resume/latest | IMPLEMENTED | Fetch most recent analysis for authenticated user |
 
 ## CAREER
 

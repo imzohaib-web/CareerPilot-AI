@@ -143,8 +143,9 @@ async def upload_and_analyze(
 ) -> ResumeAnalysisResponse:
     """Run the full pipeline: AI analysis → MongoDB → response.
 
-    Raises ``AIServiceError`` (mapped to HTTP 502 by the route) on Qwen
-    failures, or ``ResumeValidationError`` on persistence problems.
+    Raises ``AIServiceError`` on Qwen failures (the route maps this to
+    HTTP 502).  Unexpected errors (e.g. MongoDB insert failure) propagate
+    to the global exception handler which returns a 500.
     """
     analysis, model = await analyze_resume(extracted_text)
 

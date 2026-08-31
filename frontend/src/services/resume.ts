@@ -1,3 +1,5 @@
+import { AxiosError } from 'axios'
+
 import { apiClient } from './apiClient'
 import type { ResumeAnalysisResponse } from '../types'
 
@@ -19,12 +21,20 @@ export async function analyzeResume(file: File): Promise<ResumeAnalysisResponse>
   return response.data
 }
 
-/** Fetch the most recent resume analysis for the authenticated user. */
+/**
+ * Fetch the most recent resume analysis for the authenticated user.
+ *
+ * Returns ``null`` when no prior analysis exists (404).
+ * Throws on unexpected errors so the caller can show a warning.
+ */
 export async function fetchLatestResume(): Promise<ResumeAnalysisResponse | null> {
   try {
     const response = await apiClient.get<ResumeAnalysisResponse>('/api/resume/latest')
     return response.data
-  } catch {
-    return null
+  } catch (error) {
+    if (error instanceof AxiosError && error.response?.status === 404) {
+      return null
+    }
+    throw error
   }
 }
