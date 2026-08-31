@@ -6,6 +6,7 @@ import { AppLayout } from './layouts/AppLayout'
 import { AiTestPage } from './pages/AiTestPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { ProgressDashboardPage } from './pages/ProgressDashboardPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ResumeAnalyzerPage } from './pages/ResumeAnalyzerPage'
 
@@ -23,7 +24,8 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<ProfilePage />} />
+            <Route path="/" element={<ProgressDashboardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/resume" element={<ResumeAnalyzerPage />} />
             <Route path="/ai-test" element={<AiTestPage />} />
           </Route>
