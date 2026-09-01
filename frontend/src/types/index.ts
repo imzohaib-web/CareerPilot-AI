@@ -95,3 +95,40 @@ export interface ResumeAnalysisResponse {
   analyzed_at: string
   model: string
 }
+
+// ── Progress Dashboard ──────────────────────────────────────────────────
+
+export interface ProfileProgress {
+  has_profile: boolean
+  completeness: number
+  target_role: string
+  experience_level: string
+  career_goal: string
+  skills_count: number
+  skills: string[]
+}
+
+export interface ResumeProgress {
+  has_analysis: boolean
+  score: number
+  skills_detected: string[]
+  skills_count: number
+  improvements_count: number
+  improvements: string[]
+  analyzed_at: string | null
+  total_analyses: number
+}
+
+export interface NextStep {
+  label: string
+  action: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface DashboardResponse {
+  profile: ProfileProgress
+  resume: ResumeProgress
+  readiness_score: number
+  overall_progress: number
+  next_steps: NextStep[]
+}

@@ -3,7 +3,8 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const NAV_LINKS = [
-  { to: '/', label: 'Career Profile' },
+  { to: '/', label: 'Dashboard' },
+  { to: '/profile', label: 'Profile' },
   { to: '/resume', label: 'Resume' },
   { to: '/ai-test', label: 'AI Test' },
 ]
