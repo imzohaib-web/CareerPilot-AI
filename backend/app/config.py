@@ -23,6 +23,15 @@ QWEN_BASE_URL = os.getenv(
 )
 QWEN_MODEL = os.getenv("ALIBABA_CLOUD_MODEL", os.getenv("QWEN_MODEL", "qwen-plus"))
 
+# Default timeout (seconds) for Qwen requests.  Short prompts (chat, test)
+# finish well within this.  Feature-specific callers may override per-call.
+QWEN_TIMEOUT = float(os.getenv("QWEN_TIMEOUT", "60"))
+
+# Disable Qwen3 thinking mode for structured-output features (resume analysis,
+# skill gap, etc.).  Thinking adds significant latency and wraps the response
+# in <think> tags that break JSON parsing.
+QWEN_ENABLE_THINKING = os.getenv("QWEN_ENABLE_THINKING", "false").lower() == "true"
+
 # --- CORS (comma-separated list of allowed frontend origins) ---
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 CORS_ORIGINS = [origin.strip() for origin in FRONTEND_ORIGIN.split(",") if origin.strip()]

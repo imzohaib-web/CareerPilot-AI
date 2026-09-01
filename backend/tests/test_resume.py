@@ -28,6 +28,7 @@ from app.schemas.resume import (
     ResumeAnalysisResponse,
     ResumeSections,
 )
+from app.services.ai.qwen_service import AIServiceError
 from app.services.ai.resume_analyzer import _extract_json
 from app.services.dependencies import get_current_user
 from app.services.resume_service import ResumeValidationError, validate_and_extract
@@ -544,3 +545,120 @@ class TestResumeRoutes:
         assert captured_doc["model"] == "qwen-plus"
         assert "uploaded_at" in captured_doc
         assert "analyzed_at" in captured_doc
+
+
+# ── Timeout + thinking mode tests ─────────────────────────────────────────
+
+
+class TestTimeoutAndThinkingMode:
+    """Verify timeout handling and thinking mode configuration."""
+
+    @pytest.fixture(autouse=True)
+    def _cleanup_overrides(self):
+        yield
+        app.dependency_overrides.clear()
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_502_with_timed_out_message(self):
+        """A Qwen timeout must return 502 with a 'timed out' detail."""
+        app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+
+        with patch(
+            "app.services.ai.resume_analyzer.qwen_chat",
+            new_callable=AsyncMock,
+            side_effect=AIServiceError("AI provider request timed out"),
+        ):
+            async with _make_api_client() as client:
+                resp = await client.post(
+                    "/api/resume/analyze",
+                    files={"file": ("resume.pdf", _make_pdf(), "application/pdf")},
+                )
+        assert resp.status_code == 502
+        assert "timed out" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_thinking_mode_disabled_by_default(self):
+        """extra_body must include enable_thinking=False by default."""
+        app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+
+        mock_inserted_id = ObjectId()
+        mock_collection = AsyncMock()
+        mock_collection.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id=mock_inserted_id)
+        )
+        mock_db = MagicMock()
+        mock_db.resumes = mock_collection
+
+        captured_kwargs = {}
+
+        async def fake_qwen_chat(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return VALID_ANALYSIS_JSON, "qwen-plus"
+
+        with (
+            patch("app.services.resume_service.get_db", return_value=mock_db),
+            patch(
+                "app.services.ai.resume_analyzer.qwen_chat",
+                new_callable=AsyncMock,
+                side_effect=fake_qwen_chat,
+            ),
+        ):
+            async with _make_api_client() as client:
+                resp = await client.post(
+                    "/api/resume/analyze",
+                    files={"file": ("resume.pdf", _make_pdf(), "application/pdf")},
+                )
+
+        assert resp.status_code == 200
+        # Verify thinking mode is disabled and timeout is set
+        assert captured_kwargs.get("extra_body") == {"enable_thinking": False}
+        assert captured_kwargs.get("timeout") == 120.0
+
+    @pytest.mark.asyncio
+    async def test_long_resume_truncated(self):
+        """Resume text exceeding _MAX_TEXT_CHARS is truncated before sending."""
+        app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+
+        mock_inserted_id = ObjectId()
+        mock_collection = AsyncMock()
+        mock_collection.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id=mock_inserted_id)
+        )
+        mock_db = MagicMock()
+        mock_db.resumes = mock_collection
+
+        captured_args = {}
+
+        async def fake_qwen_chat(user_message, **kwargs):
+            captured_args["user_message"] = user_message
+            return VALID_ANALYSIS_JSON, "qwen-plus"
+
+        long_text = "A" * 20_000  # exceeds _MAX_TEXT_CHARS (15_000)
+
+        with (
+            patch("app.services.resume_service.get_db", return_value=mock_db),
+            patch(
+                "app.services.ai.resume_analyzer.qwen_chat",
+                new_callable=AsyncMock,
+                side_effect=fake_qwen_chat,
+            ),
+        ):
+            async with _make_api_client() as client:
+                resp = await client.post(
+                    "/api/resume/analyze",
+                    files={
+                        "file": (
+                            "long_resume.pdf",
+                            _make_pdf(long_text),
+                            "application/pdf",
+                        )
+                    },
+                )
+
+        assert resp.status_code == 200
+        # The user message should contain truncated text (15_000 chars + prefix)
+        msg = captured_args["user_message"]
+        # The message starts with "Analyze the following resume text:\n\n"
+        # followed by at most 15_000 chars of text
+        text_part = msg.split("\n\n", 1)[1]
+        assert len(text_part) <= 15_000

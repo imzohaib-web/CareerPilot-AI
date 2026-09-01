@@ -11,9 +11,11 @@ Output trust policy (per AI_ARCHITECTURE.md):
 import json
 import logging
 import re
+import time
 
 from pydantic import ValidationError
 
+from app import config
 from app.schemas.resume import ResumeAnalysis
 from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
 
@@ -68,6 +70,10 @@ _ANALYSIS_TEMPERATURE = 0.2
 # Hard cap on resume text sent to the model (tokens cost money).
 _MAX_TEXT_CHARS = 15_000
 
+# Resume analysis needs more time than a short chat — structured JSON output
+# with multiple sections is slower to generate.  Configurable via env.
+_RESUME_TIMEOUT = float(120)
+
 
 # ── Public API ────────────────────────────────────────────────────────────
 
@@ -86,13 +92,30 @@ async def analyze_resume(extracted_text: str) -> tuple[ResumeAnalysis, str]:
     # Truncate overly long resumes to stay within token limits.
     user_text = extracted_text.strip()
     if len(user_text) > _MAX_TEXT_CHARS:
+        logger.info(
+            "Resume text truncated from %d to %d chars for Qwen request",
+            len(user_text),
+            _MAX_TEXT_CHARS,
+        )
         user_text = user_text[:_MAX_TEXT_CHARS]
+
+    logger.info(
+        "Starting Qwen resume analysis (text_chars=%d, timeout=%.0fs)",
+        len(user_text),
+        _RESUME_TIMEOUT,
+    )
 
     user_message = f"Analyze the following resume text:\n\n{user_text}"
 
     # First attempt
+    t0 = time.monotonic()
     analysis, model = await _call_and_parse(user_message)
     if analysis is not None:
+        logger.info(
+            "Qwen resume analysis succeeded in %.1fs (model=%s)",
+            time.monotonic() - t0,
+            model,
+        )
         return analysis, model
 
     # Retry once with a corrective nudge (per output-trust policy).
@@ -106,6 +129,11 @@ async def analyze_resume(extracted_text: str) -> tuple[ResumeAnalysis, str]:
     if analysis is None:
         raise AIServiceError("AI returned an unparseable resume analysis after retry")
 
+    logger.info(
+        "Qwen resume analysis succeeded on retry in %.1fs (model=%s)",
+        time.monotonic() - t0,
+        model,
+    )
     return analysis, model
 
 
@@ -121,6 +149,10 @@ async def _call_and_parse(
             user_message,
             system_prompt=RESUME_ANALYSIS_SYSTEM_PROMPT,
             temperature=_ANALYSIS_TEMPERATURE,
+            timeout=_RESUME_TIMEOUT,
+            # Disable Qwen3 thinking mode — it adds significant latency and
+            # wraps the response in <think> tags that break JSON parsing.
+            extra_body={"enable_thinking": config.QWEN_ENABLE_THINKING},
         )
     except AIServiceError:
         raise
