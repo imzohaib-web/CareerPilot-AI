@@ -46,8 +46,9 @@ async def chat(
     temperature: float | None = None,
     timeout: float | None = None,
     extra_body: dict | None = None,
+    history: list[dict] | None = None,
 ) -> tuple[str, str]:
-    """Send a single-turn message to Qwen.
+    """Send a message to Qwen, optionally with prior conversation turns.
 
     Returns ``(reply_text, model)``. Raises ``AIServiceError`` on any
     provider failure.
@@ -61,11 +62,22 @@ async def chat(
         (e.g. resume analysis) should pass a longer value.
     extra_body : merged into the request body.  Used to control
         provider-specific options such as Qwen3 thinking mode.
+    history : earlier conversation turns as ``{"role", "content"}`` dicts,
+        replayed between the system prompt and the current user message.
+        Only ``user``/``assistant`` turns with non-empty content are sent;
+        malformed entries are skipped.
     """
     client = _get_client()
-    messages = []
+    messages: list[dict] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    for turn in history or []:
+        if not isinstance(turn, dict):
+            continue
+        role = turn.get("role")
+        content = turn.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": user_message})
 
     effective_timeout = timeout if timeout is not None else config.QWEN_TIMEOUT

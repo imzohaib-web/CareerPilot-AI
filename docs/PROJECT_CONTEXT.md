@@ -21,7 +21,7 @@ CareerPilot AI — an AI career-readiness platform for students: resume analysis
 
 ## Current development day
 
-Day 2 — 30 August 2026 (Resume Analyzer)
+Day 4 — 1 September 2026 (AI Mentor + Mock Interview)
 
 ## Completed work
 
@@ -35,10 +35,12 @@ Day 2 — 30 August 2026 (Resume Analyzer)
 - Qwen connectivity: `services/ai/qwen_service.py` (Alibaba Cloud Model Studio OpenAI-compatible workspace endpoint) + `POST /api/ai/test` — live-verified with model `qwen3.7-plus`
 - Frontend: axios API client + interceptors, AuthContext, Login/Register/Profile/AI-Test pages, protected routes — full browser E2E passed (8/8)
 - Day 2 Resume Analyzer: PDF upload + validation (extension, magic bytes, size, PyMuPDF extraction), structured Qwen analysis with retry, Pydantic validation, MongoDB persistence, full results UI — 31 backend tests pass, frontend tsc/lint/build clean, 35/35 live E2E checks pass
+- Progress Dashboard: `GET /api/progress` aggregation service + frontend page (profile/resume status, readiness score, next steps)
+- Day 4 AI Career Mentor backend: `POST /api/chat/message` + `GET /api/chat/history`, mentor grounded in career profile + latest resume analysis, bounded conversation history (16 turns / 24k chars), `conversations` collection with `user_id` index, multi-turn `qwen_service.chat(history=...)`, reply validation — 49 new tests (113 total pass), live Qwen smoke test passed with conversation continuity verified
 
 ## Current task
 
-Day 2 COMPLETE. Next: Day 3 — Skill Gap + Personalized Roadmap.
+Day 4 in progress. Done: Career Mentor backend. Next: Mock Interview (or Career Mentor frontend if reassigned).
 
 ## Key decisions
 
@@ -49,6 +51,7 @@ Day 2 COMPLETE. Next: Day 3 — Skill Gap + Personalized Roadmap.
 - `backend/.env` is loaded by absolute path so the backend starts from any working directory
 - MCP & RAG are optional, post-MVP
 - Cut order under pressure: BONUS → SHOULD HAVE → never MUST HAVE
+- Career Mentor: one conversation document per user turn flow in `conversations` (multiple allowed); `conversation_id` is optional — omitting it continues the most recent conversation; ownership always resolved from the JWT; Day 3 skill-gap/roadmap were skipped, so mentor grounding uses profile + resume analysis only (never fabricated)
 
 ## Known issues
 
@@ -56,7 +59,7 @@ Day 2 COMPLETE. Next: Day 3 — Skill Gap + Personalized Roadmap.
 
 ## Next task
 
-Day 3 — Skill Gap + Personalized Roadmap (`docs/DEVELOPMENT_PLAN.md`).
+Day 4 remainder — Mock Interview backend (`docs/DEVELOPMENT_PLAN.md`), plus the Career Mentor frontend page.
 
 ## Team
 

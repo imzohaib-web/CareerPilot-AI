@@ -38,7 +38,8 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | /api/chat/message | PLANNED | Send message to Career Mentor |
+| POST | /api/chat/message | IMPLEMENTED | Send message to Career Mentor (grounded in profile + latest resume analysis; persists the turn) |
+| GET | /api/chat/history | IMPLEMENTED | Fetch the user's mentor conversation (latest when no `conversation_id` query param is given) |
 
 ## INTERVIEW
 
@@ -52,7 +53,7 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| GET | /api/progress/dashboard | PLANNED | Dashboard summary |
+| GET | /api/progress | IMPLEMENTED | Dashboard summary |
 | PUT | /api/progress/update | PLANNED | Update task completion |
 
 ## AI TEST

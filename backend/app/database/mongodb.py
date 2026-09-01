@@ -35,6 +35,7 @@ async def connect_db() -> None:
     await db.users.create_index("email", unique=True)
     await db.career_profiles.create_index("user_id", unique=True)
     await db.resumes.create_index("user_id")
+    await db.conversations.create_index("user_id")
     logger.info("Connected to MongoDB database '%s'", config.MONGODB_NAME)
 
 
