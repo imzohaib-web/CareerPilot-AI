@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { AppLayout } from './layouts/AppLayout'
 import { AiTestPage } from './pages/AiTestPage'
+import { CareerMentorPage } from './pages/CareerMentorPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProgressDashboardPage } from './pages/ProgressDashboardPage'
@@ -27,6 +28,7 @@ function App() {
             <Route path="/" element={<ProgressDashboardPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/resume" element={<ResumeAnalyzerPage />} />
+            <Route path="/mentor" element={<CareerMentorPage />} />
             <Route path="/ai-test" element={<AiTestPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
