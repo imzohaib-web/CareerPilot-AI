@@ -342,5 +342,23 @@ export interface RAGChatResponse {
   model_used: string
 }
 
+// ── Career Mentor ────────────────────────────────────────────────────────
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
 
+export interface MentorChatResponse {
+  conversation_id: string
+  message: ChatMessage
+  model: string
+}
+
+export interface MentorHistoryResponse {
+  conversation_id: string | null
+  messages: ChatMessage[]
+  created_at: string | null
+  updated_at: string | null
+}

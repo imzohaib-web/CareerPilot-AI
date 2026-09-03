@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { to: '/resume', label: 'Resume' },
   { to: '/skill-gap', label: 'Skill Gap' },
   { to: '/roadmap', label: 'Roadmap' },
+  { to: '/mentor', label: 'Mentor' },
   { to: '/interview', label: 'Mock Interview' },
   { to: '/rag', label: 'RAG Advisor' },
   { to: '/ai-test', label: 'AI Test' },

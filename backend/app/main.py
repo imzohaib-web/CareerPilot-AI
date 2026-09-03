@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app import config
 from app.database.mongodb import close_db, connect_db, get_db
-from app.routes import ai, auth, interview, profile, progress, rag, resume, roadmap, skill_gap
+from app.routes import ai, auth, chat, interview, profile, progress, rag, resume, roadmap, skill_gap
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ app.include_router(roadmap.router)
 app.include_router(interview.router)
 app.include_router(rag.router)
 app.include_router(progress.router)
+app.include_router(chat.router)
 
 
 @app.get("/api/health")
