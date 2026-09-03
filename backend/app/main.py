@@ -46,9 +46,13 @@ app.include_router(chat.router)
 
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Report API health and MongoDB connectivity."""
+    """Report API health and MongoDB connectivity (lightweight ping)."""
     database = "connected"
     try:
+        # Throttled reconnect attempt — no-op when already connected. A
+        # transient startup failure (DNS propagation, Atlas IP whitelist
+        # added after deploy) therefore self-heals without a restart.
+        await connect_db()
         await get_db().command("ping")
     except Exception:
         database = "disconnected"
