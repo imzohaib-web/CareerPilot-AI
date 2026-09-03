@@ -7,8 +7,19 @@ or provider internals escape this service.
 
 import logging
 import time
+from urllib.parse import urlparse
 
-from openai import APITimeoutError, AsyncOpenAI, OpenAIError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    BadRequestError,
+    NotFoundError,
+    OpenAIError,
+    RateLimitError,
+)
 
 from app import config
 
@@ -21,6 +32,21 @@ class AIServiceError(Exception):
     """Provider failure with a message that is safe to surface to clients."""
 
 
+class AIConfigurationError(AIServiceError):
+    """AI credentials/settings are missing (a setup problem, not a provider
+    failure). Routes map this to HTTP 503 so clients can tell the difference
+    between "the server is not set up" and "the provider is down"."""
+
+
+def _base_url_host() -> str:
+    """Hostname of the configured base URL — safe for logs (no credentials,
+    no API keys, no path/query components)."""
+    try:
+        return urlparse(config.QWEN_BASE_URL).hostname or "unknown"
+    except ValueError:
+        return "unknown"
+
+
 def _get_client() -> AsyncOpenAI:
     """Return the shared OpenAI-compatible client for DashScope.
 
@@ -31,11 +57,26 @@ def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
         if not config.ALIBABA_CLOUD_API_KEY:
-            raise AIServiceError("AI service is not configured")
+            logger.error(
+                "Qwen client NOT initialized: ALIBABA_CLOUD_API_KEY is empty "
+                "(api_key_configured=false, base_url_host=%s, model=%s)",
+                _base_url_host(),
+                config.QWEN_MODEL,
+            )
+            raise AIConfigurationError(
+                "AI service is not configured: ALIBABA_CLOUD_API_KEY is missing "
+                "in backend/.env"
+            )
         _client = AsyncOpenAI(
             api_key=config.ALIBABA_CLOUD_API_KEY,
             base_url=config.QWEN_BASE_URL,
             max_retries=0,
+        )
+        logger.info(
+            "Qwen client initialized (api_key_configured=true, base_url_host=%s, "
+            "model=%s)",
+            _base_url_host(),
+            config.QWEN_MODEL,
         )
     return _client
 
@@ -93,22 +134,95 @@ async def chat(
         kwargs["extra_body"] = extra_body
 
     t0 = time.monotonic()
+    logger.debug(
+        "Qwen request started (model=%s, messages=%d, timeout=%.0fs, base_url_host=%s)",
+        config.QWEN_MODEL,
+        len(messages),
+        effective_timeout,
+        _base_url_host(),
+    )
     try:
         completion = await client.chat.completions.create(**kwargs)
     except APITimeoutError as exc:
         duration = time.monotonic() - t0
-        # Log exception type + duration; never expose keys or request bodies.
+        # Log duration + context; never expose keys or request bodies.
         logger.error(
-            "Qwen request timed out after %.1fs (limit %.0fs): %s",
+            "Qwen request timed out after %.1fs (limit %.0fs, model=%s)",
             duration,
             effective_timeout,
-            type(exc).__name__,
+            config.QWEN_MODEL,
         )
-        raise AIServiceError("AI provider request timed out") from exc
+        raise AIServiceError(
+            f"AI provider request timed out after {effective_timeout:.0f}s"
+        ) from exc
+    except AuthenticationError as exc:
+        duration = time.monotonic() - t0
+        logger.error(
+            "Qwen rejected the configured API key (HTTP 401) after %.1fs",
+            duration,
+        )
+        raise AIServiceError(
+            "AI provider rejected the configured API key (HTTP 401)"
+        ) from exc
+    except NotFoundError as exc:
+        duration = time.monotonic() - t0
+        logger.error(
+            "Qwen model/endpoint not found (HTTP 404) after %.1fs "
+            "(model=%s, base_url_host=%s)",
+            duration,
+            config.QWEN_MODEL,
+            _base_url_host(),
+        )
+        raise AIServiceError(
+            "AI provider did not recognize the configured model or endpoint "
+            "(HTTP 404)"
+        ) from exc
+    except BadRequestError as exc:
+        duration = time.monotonic() - t0
+        # Provider error body can explain the bad parameter — safe to log
+        # server-side (contains no secrets), truncated.
+        logger.error(
+            "Qwen rejected request parameters (HTTP 400) after %.1fs "
+            "(model=%s): %.300s",
+            duration,
+            config.QWEN_MODEL,
+            exc,
+        )
+        raise AIServiceError(
+            "AI provider rejected the request parameters (HTTP 400)"
+        ) from exc
+    except RateLimitError as exc:
+        duration = time.monotonic() - t0
+        logger.error("Qwen rate limit reached (HTTP 429) after %.1fs", duration)
+        raise AIServiceError(
+            "AI provider rate limit reached; please try again shortly"
+        ) from exc
+    except APIConnectionError as exc:
+        duration = time.monotonic() - t0
+        logger.error(
+            "Qwen connection failed after %.1fs (base_url_host=%s): %.300s",
+            duration,
+            _base_url_host(),
+            exc,
+        )
+        raise AIServiceError("Could not connect to the AI provider") from exc
+    except APIStatusError as exc:
+        duration = time.monotonic() - t0
+        status_code = getattr(exc, "status_code", "?")
+        logger.error(
+            "Qwen HTTP error %s after %.1fs (model=%s): %.300s",
+            status_code,
+            duration,
+            config.QWEN_MODEL,
+            exc,
+        )
+        raise AIServiceError(
+            f"AI provider returned an error (HTTP {status_code})"
+        ) from exc
     except OpenAIError as exc:
         duration = time.monotonic() - t0
         logger.error(
-            "Qwen request failed after %.1fs [%s]: %s",
+            "Qwen request failed after %.1fs [%s]: %.300s",
             duration,
             type(exc).__name__,
             exc,

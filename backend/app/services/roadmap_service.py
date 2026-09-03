@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -16,6 +15,7 @@ from app.schemas.roadmap import (
     RoadmapRequest,
     RoadmapResponse,
 )
+from app.services.ai.json_utils import extract_json_block, loads_lenient
 from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
 
 logger = logging.getLogger(__name__)
@@ -222,13 +222,14 @@ async def _call_and_validate(user_message: str) -> tuple[RoadmapContent | None, 
     except AIServiceError:
         raise
 
-    raw_json = _extract_json(reply)
+    raw_json = extract_json_block(reply)
     if raw_json is None:
         logger.warning("Could not extract JSON from Qwen response: %s", reply[:200])
         return None, model
 
     try:
-        data = json.loads(raw_json)
+        # Lenient parse tolerates control characters inside strings (json_utils).
+        data = loads_lenient(raw_json)
     except json.JSONDecodeError as exc:
         logger.warning("Roadmap JSON parse error: %s — snippet: %s", exc, raw_json[:200])
         return None, model
@@ -240,23 +241,6 @@ async def _call_and_validate(user_message: str) -> tuple[RoadmapContent | None, 
         return None, model
 
     return content, model
-
-
-def _extract_json(text: str) -> str | None:
-    """Extract JSON object from string, tolerating code fences."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
-        stripped = re.sub(r"\s*```\s*$", "", stripped)
-
-    if stripped.startswith("{"):
-        return stripped
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return text[start : end + 1]
-    return None
 
 
 def _serialize(doc: dict, content: RoadmapContent) -> RoadmapResponse:

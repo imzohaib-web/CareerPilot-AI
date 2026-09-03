@@ -10,13 +10,13 @@ Output trust policy (per AI_ARCHITECTURE.md):
 
 import json
 import logging
-import re
 import time
 
 from pydantic import ValidationError
 
 from app import config
 from app.schemas.resume import ResumeAnalysis
+from app.services.ai.json_utils import extract_json_block, loads_lenient
 from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
 
 logger = logging.getLogger(__name__)
@@ -83,8 +83,9 @@ async def analyze_resume(extracted_text: str) -> tuple[ResumeAnalysis, str]:
 
     Returns ``(analysis, model_name)``.
 
-    Raises ``AIServiceError`` on provider failures or repeated validation
-    failures (the caller maps that to an HTTP 502).
+    Raises ``AIConfigurationError`` when the provider is not configured
+    (the caller maps that to HTTP 503) and ``AIServiceError`` on provider
+    failures or repeated validation failures (mapped to HTTP 502).
     """
     if not extracted_text or not extracted_text.strip():
         raise AIServiceError("No resume text provided for analysis")
@@ -157,44 +158,33 @@ async def _call_and_parse(
     except AIServiceError:
         raise
 
-    raw_json = _extract_json(reply)
+    raw_json = extract_json_block(reply)
     if raw_json is None:
-        logger.warning("Could not extract JSON from Qwen response: %s", reply[:200])
+        logger.warning(
+            "Resume analysis failed at stage=json_extract (reply_chars=%d): %s",
+            len(reply),
+            reply[:200],
+        )
         return None, model
 
     try:
-        data = json.loads(raw_json)
+        # Lenient parse: Qwen routinely emits literal control characters
+        # (raw newlines/tabs) inside string values — the JSON is otherwise
+        # valid and must not fail the request.
+        data = loads_lenient(raw_json)
     except json.JSONDecodeError as exc:
-        logger.warning("Qwen JSON parse error: %s — snippet: %s", exc, raw_json[:200])
+        logger.warning(
+            "Resume analysis failed at stage=json_parse: %s — snippet: %s",
+            exc,
+            raw_json[:200],
+        )
         return None, model
 
     try:
         analysis = ResumeAnalysis.model_validate(data)
     except ValidationError as exc:
-        logger.warning("Resume analysis schema validation failed: %s", exc)
+        logger.warning("Resume analysis failed at stage=schema_validation: %s", exc)
         return None, model
 
     # Business validation: clamp score just in case (Pydantic ge/le already set).
     return analysis, model
-
-
-def _extract_json(text: str) -> str | None:
-    """Extract the first JSON object from *text*, tolerating markdown fences."""
-    # Strip markdown code fences if present.
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        # Remove opening fence (```json or ```) and closing fence.
-        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
-        stripped = re.sub(r"\s*```\s*$", "", stripped)
-
-    # Try direct parse first.
-    if stripped.startswith("{"):
-        return stripped
-
-    # Fallback: find first { ... last }.
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return text[start : end + 1]
-
-    return None

@@ -1,8 +1,6 @@
 """AI Mock Interview service: generate role-specific questions and evaluate candidate answers."""
 
-import json
 import logging
-import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -20,6 +18,7 @@ from app.schemas.interview import (
     QuestionEvaluation,
     UserAnswer,
 )
+from app.services.ai.json_utils import extract_json_block, loads_lenient
 from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
 
 logger = logging.getLogger(__name__)
@@ -296,11 +295,12 @@ async def _generate_questions(
 
 def _parse_questions(text: str) -> list[InterviewQuestion] | None:
     """Extract and validate questions list from AI output."""
-    raw_json = _extract_json(text)
+    raw_json = extract_json_block(text)
     if not raw_json:
         return None
     try:
-        data = json.loads(raw_json)
+        # Lenient parse tolerates control characters inside strings (json_utils).
+        data = loads_lenient(raw_json)
         if isinstance(data, list):
             data = {"questions": data}
         wrapper = _QuestionListWrapper.model_validate(data)
@@ -355,32 +355,16 @@ async def _evaluate_answers(
 
 def _parse_feedback(text: str) -> InterviewFeedback | None:
     """Extract and validate InterviewFeedback from AI output."""
-    raw_json = _extract_json(text)
+    raw_json = extract_json_block(text)
     if not raw_json:
         return None
     try:
-        data = json.loads(raw_json)
+        # Lenient parse tolerates control characters inside strings (json_utils).
+        data = loads_lenient(raw_json)
         return InterviewFeedback.model_validate(data)
     except Exception as exc:
         logger.warning("Failed to parse interview feedback: %s", exc)
         return None
-
-
-def _extract_json(text: str) -> str | None:
-    """Extract JSON from text, tolerating markdown fences."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
-        stripped = re.sub(r"\s*```\s*$", "", stripped)
-
-    if stripped.startswith("{") or stripped.startswith("["):
-        return stripped
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return text[start : end + 1]
-    return None
 
 
 def _serialize(doc: dict) -> InterviewResponse:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.schemas.resume import ResumeAnalysisResponse
 from app.services import resume_service
-from app.services.ai.qwen_service import AIServiceError
+from app.services.ai.qwen_service import AIConfigurationError, AIServiceError
 from app.services.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ async def upload_and_analyze(
         )
 
     # 2. AI analysis + MongoDB persistence.
+    #    AIConfigurationError (missing setup) → 503.
     #    AIServiceError (Qwen failure) → 502.
     #    Any other unexpected error falls through to the global handler (500).
     try:
@@ -37,6 +38,11 @@ async def upload_and_analyze(
             user_id=str(current_user["_id"]),
             extracted_text=extracted_text,
             filename=filename,
+        )
+    except AIConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
         )
     except AIServiceError as exc:
         raise HTTPException(

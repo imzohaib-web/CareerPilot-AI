@@ -62,6 +62,12 @@ export function describeApiError(error: unknown): {
     if (status === 422) {
       return { category: 'validation', message: detail ?? 'Please check the form input.' }
     }
+    if (status === 503) {
+      return {
+        category: 'server',
+        message: detail ?? 'The AI service is not configured on the server.',
+      }
+    }
     if (status === 502) {
       return { category: 'ai-provider', message: detail ?? 'The AI service is unavailable.' }
     }

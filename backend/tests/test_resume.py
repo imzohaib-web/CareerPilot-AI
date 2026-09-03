@@ -28,8 +28,9 @@ from app.schemas.resume import (
     ResumeAnalysisResponse,
     ResumeSections,
 )
-from app.services.ai.qwen_service import AIServiceError
-from app.services.ai.resume_analyzer import _extract_json
+from app.services.ai.json_utils import extract_json_block
+from app.services.ai.qwen_service import AIConfigurationError, AIServiceError
+from app.services.ai.resume_analyzer import analyze_resume
 from app.services.dependencies import get_current_user
 from app.services.resume_service import ResumeValidationError, validate_and_extract
 
@@ -179,29 +180,43 @@ class TestResumeAnalysisSchema:
 
 
 class TestExtractJson:
-    """Test _extract_json from AI responses."""
+    """Test extract_json_block (shared AI JSON extraction) from responses."""
 
     def test_plain_json(self):
-        result = _extract_json('{"score": 50}')
+        result = extract_json_block('{"score": 50}')
         assert result == '{"score": 50}'
 
     def test_json_in_markdown_fence(self):
         text = '```json\n{"score": 50}\n```'
-        result = _extract_json(text)
+        result = extract_json_block(text)
         assert result is not None
         assert json.loads(result)["score"] == 50
 
     def test_json_with_surrounding_text(self):
         text = 'Here is the analysis:\n{"score": 80}\nDone.'
-        result = _extract_json(text)
+        result = extract_json_block(text)
         assert result is not None
         assert json.loads(result)["score"] == 80
 
+    def test_json_inside_think_block_is_ignored(self):
+        """A Qwen3 thinking block may itself contain braces — the real JSON
+        payload after the block must still be extracted."""
+        # Tags built by concatenation so tooling cannot strip them as markup.
+        think_open = "<" + "think" + ">"
+        think_close = "<" + "/think" + ">"
+        text = think_open + ' {"bogus": 1}' + think_close + '\n{"score": 50}'
+        result = extract_json_block(text)
+        assert result is not None
+        assert json.loads(result)["score"] == 50
+
+    def test_bare_json_array_returned(self):
+        assert extract_json_block('[{"q": 1}]') == '[{"q": 1}]'
+
     def test_no_json_returns_none(self):
-        assert _extract_json("I cannot analyze this resume.") is None
+        assert extract_json_block("I cannot analyze this resume.") is None
 
     def test_empty_string(self):
-        assert _extract_json("") is None
+        assert extract_json_block("") is None
 
 
 # ── PDF validation tests ──────────────────────────────────────────────────
@@ -373,8 +388,6 @@ class TestResumeRoutes:
         """Qwen failure must map to 502."""
         app.dependency_overrides[get_current_user] = lambda: FAKE_USER
 
-        from app.services.ai.qwen_service import AIServiceError
-
         with patch(
             "app.services.ai.resume_analyzer.qwen_chat",
             new_callable=AsyncMock,
@@ -389,6 +402,28 @@ class TestResumeRoutes:
                 )
         assert resp.status_code == 502
         assert "AI" in resp.json()["detail"] or "provider" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_analyze_missing_api_key_returns_503(self):
+        """Missing AI configuration must map to 503, not 502."""
+        app.dependency_overrides[get_current_user] = lambda: FAKE_USER
+
+        with patch(
+            "app.services.ai.resume_analyzer.qwen_chat",
+            new_callable=AsyncMock,
+            side_effect=AIConfigurationError(
+                "AI service is not configured: ALIBABA_CLOUD_API_KEY is missing in backend/.env"
+            ),
+        ):
+            async with _make_api_client() as client:
+                resp = await client.post(
+                    "/api/resume/analyze",
+                    files={
+                        "file": ("resume.pdf", _make_pdf(), "application/pdf")
+                    },
+                )
+        assert resp.status_code == 503
+        assert "not configured" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_analyze_invalid_ai_json(self):
@@ -663,3 +698,47 @@ class TestTimeoutAndThinkingMode:
         # followed by at most 15_000 chars of text
         text_part = msg.split("\n\n", 1)[1]
         assert len(text_part) <= 15_000
+
+
+# ── Lenient JSON parsing (control characters) ─────────────────────────────
+
+
+class TestLenientJsonParsing:
+    """Qwen emits raw control characters inside JSON string values.
+
+    Regression: strict json.loads raised "Invalid control character" even
+    though the JSON was otherwise valid, causing a 502 after retry.
+    """
+
+    @pytest.mark.asyncio
+    async def test_analyze_resume_tolerates_control_chars_in_strings(self):
+        # The summary value contains a literal newline inside the quoted
+        # string — forbidden by strict JSON, common in Qwen output.
+        reply_with_raw_newline = (
+            "{\n"
+            '  "score": 65,\n'
+            '  "summary": "Zohaib is an undergraduate Software Engineering student\n'
+            "at COMSATS University with a focus on React development\",\n"
+            '  "strengths": ["Strong frontend focus"],\n'
+            '  "skills_detected": ["React", "Python"]\n'
+            "}"
+        )
+        with patch(
+            "app.services.ai.resume_analyzer.qwen_chat",
+            new_callable=AsyncMock,
+            return_value=(reply_with_raw_newline, "qwen-plus"),
+        ):
+            analysis, model = await analyze_resume("John Doe\nReact developer")
+
+        assert analysis.score == 65
+        assert "COMSATS" in analysis.summary
+        assert model == "qwen-plus"
+
+    @pytest.mark.asyncio
+    async def test_strict_parse_would_reject_control_chars(self):
+        """Guard: the same payload must fail with strict json.loads — proves
+        the lenient parser is what makes the flow work."""
+        payload = '{"summary": "line one\nline two"}'
+        with pytest.raises(json.JSONDecodeError, match="Invalid control character"):
+            json.loads(payload)
+        assert json.loads(payload, strict=False)["summary"] == "line one\nline two"
