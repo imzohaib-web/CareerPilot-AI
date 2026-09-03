@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: careerpilot-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_NAME
+        value: careerpilot_ai
+      - key: JWT_SECRET
+        sync: false
+      - key: ALIBABA_CLOUD_API_KEY
+        sync: false
+      - key: ALIBABA_CLOUD_BASE_URL
+        sync: false
+      - key: ALIBABA_CLOUD_MODEL
+        value: qwen-plus
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: QWEN_TIMEOUT
+        value: "60"
+      - key: RESUME_MAX_SIZE_MB
+        value: "5"
+    healthCheckPath: /api/health

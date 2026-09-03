@@ -50,7 +50,8 @@ async def connect_db() -> None:
         logger.info("Connected to MongoDB database '%s'", config.MONGODB_NAME)
     except Exception as exc:
         _client = None
-        logger.warning("Could not connect to MongoDB: %s (running in offline mode)", exc)
+        # Sanitize: never log credentials or connection string details.
+        logger.warning("Could not connect to MongoDB (running in offline mode)")
 
 
 async def close_db() -> None:

@@ -46,7 +46,7 @@ Backend (Python + FastAPI) ── 10 routers, 27 endpoints
 | Database | MongoDB (Motor 3.7 async driver) with offline fallback |
 | Auth | JWT (python-jose, HS256) + bcrypt password hashing |
 | AI | Alibaba Cloud Model Studio / Qwen (qwen-plus via OpenAI-compatible API) |
-| Testing | pytest (143 tests), oxlint, TypeScript strict mode |
+| Testing | pytest (162 tests), oxlint, TypeScript strict mode |
 
 ## Getting Started
 
@@ -98,12 +98,16 @@ Copy `backend/.env.example` to `backend/.env` and fill in:
 
 | Variable | Required | Purpose |
 |----------|----------|--------|
-| `MONGODB_URI` | No | MongoDB connection string (app works without it via offline mode) |
+| `MONGODB_URI` | Yes (production) | MongoDB Atlas connection string (optional locally — app has offline fallback) |
 | `JWT_SECRET` | Yes | Secret key for signing JWT tokens |
 | `ALIBABA_CLOUD_API_KEY` | Yes | Qwen / Alibaba Cloud Model Studio API key |
-| `JWT_EXPIRATION_HOURS` | No | Token validity duration (default: 48) |
-| `MONGODB_DB_NAME` | No | Database name (default: `career_pilot_ai`) |
-| `CORS_ORIGINS` | No | Allowed origins (default: `http://localhost:5173`) |
+| `ALIBABA_CLOUD_BASE_URL` | No | OpenAI-compatible endpoint URL (default: DashScope) |
+| `ALIBABA_CLOUD_MODEL` | No | Model name (default: `qwen-plus`) |
+| `MONGODB_NAME` | No | Database name (default: `careerpilot_ai`) |
+| `JWT_EXPIRES_MINUTES` | No | Token validity in minutes (default: 1440 = 24h) |
+| `FRONTEND_ORIGIN` | No | Comma-separated CORS origins (default: localhost dev ports) |
+| `QWEN_TIMEOUT` | No | Default Qwen request timeout in seconds (default: 60) |
+| `RESUME_MAX_SIZE_MB` | No | Maximum resume file size (default: 5 MB) |
 
 ### Frontend (`frontend/.env`) — Optional
 
@@ -127,7 +131,7 @@ CareerPilot AI/
 │   │   │   └── ai/          # Qwen AI service (isolated)
 │   │   ├── config.py        # Settings from environment
 │   │   └── main.py          # App entry point + router registration
-│   ├── tests/               # 143 pytest tests
+│   ├── tests/               # 162 pytest tests
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -139,14 +143,16 @@ CareerPilot AI/
 │   │   ├── services/        # API client layer (Axios)
 │   │   └── types/           # TypeScript type definitions
 │   ├── package.json
+│   ├── vercel.json          # Vercel SPA rewrite rules
 │   └── .env.example
-└── docs/                    # Architecture, specs, plans
+├── render.yaml               # Render deployment blueprint
+└── docs/                     # Architecture, specs, plans
 ```
 
 ## Testing
 
 ```powershell
-# Backend tests (143 tests)
+# Backend tests (162 tests)
 cd "backend"
 .\venv\Scripts\python -m pytest tests/ -v
 
@@ -176,6 +182,53 @@ Architecture, specs, and plans live in [`docs/`](docs/PROJECT_SPEC.md):
 - [Project Spec](docs/PROJECT_SPEC.md) · [Architecture](docs/ARCHITECTURE.md) · [AI Architecture](docs/AI_ARCHITECTURE.md)
 - [API Spec](docs/API_SPEC.md) · [Database Schema](docs/DATABASE_SCHEMA.md) · [MVP Scope](docs/MVP_SCOPE.md)
 - [Demo Flow](docs/DEMO_FLOW.md) · [Development Plan](docs/DEVELOPMENT_PLAN.md)
+
+## Deployment
+
+### Frontend — Vercel
+
+1. Import the repository into Vercel and set the **root directory** to `frontend`.
+2. Add the environment variable `VITE_API_BASE_URL` pointing to your Render backend URL (e.g. `https://careerpilot-api.onrender.com`). No trailing slash.
+3. Vercel auto-detects the Vite build (`npm run build`). Deploy.
+4. SPA routing is handled by `frontend/vercel.json` — all routes rewrite to `index.html`.
+
+### Backend — Render
+
+1. Create a new **Web Service** on Render and connect your GitHub repository.
+2. Set the **root directory** to `backend`.
+3. **Build command:** `pip install -r requirements.txt`
+4. **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. Add the required environment variables in Render's dashboard:
+
+| Variable | Value |
+|----------|-------|
+| `MONGODB_URI` | Your MongoDB Atlas connection string |
+| `JWT_SECRET` | A long random string |
+| `ALIBABA_CLOUD_API_KEY` | Your Alibaba Cloud / Qwen API key |
+| `ALIBABA_CLOUD_BASE_URL` | Your Alibaba Cloud workspace endpoint |
+| `ALIBABA_CLOUD_MODEL` | `qwen-plus` (or your preferred model) |
+| `FRONTEND_ORIGIN` | Your Vercel production URL (e.g. `https://careerpilot.vercel.app`) |
+
+6. **Health check path:** `/api/health`
+7. A `render.yaml` blueprint is included at the repository root for one-click deploy.
+
+### Database — MongoDB Atlas
+
+Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas). The `MONGODB_URI` should include the database user credentials. The app auto-creates indexes on first connection.
+
+### AI — Alibaba Cloud Model Studio / Qwen
+
+All AI features use the OpenAI-compatible endpoint. The API key and base URL are configured as backend environment variables and **never reach the frontend**.
+
+### Health Endpoint
+
+`GET /api/health` returns `{"status": "ok", "database": "connected"}` (or `"disconnected"` if MongoDB is unreachable).
+
+### Architecture
+
+```
+Vercel (React SPA)  →  Render (FastAPI)  →  MongoDB Atlas + Alibaba Cloud Qwen
+```
 
 ## Team
 
