@@ -26,10 +26,10 @@ router = APIRouter(prefix="/api/rag", tags=["RAG & Knowledge Base"])
 @router.post("/documents/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     payload: DocumentIngestRequest,
-    user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ) -> DocumentUploadResponse:
     """Ingest a new job description or career document into vector chunks."""
-    user_id = str(user.get("_id", user.get("id")))
+    user_id = str(current_user["_id"])
     try:
         return await rag_service.ingest_document(user_id=user_id, payload=payload)
     except Exception as exc:
@@ -42,20 +42,20 @@ async def upload_document(
 
 @router.get("/documents", response_model=list[DocumentInfo])
 async def list_documents(
-    user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ) -> list[DocumentInfo]:
     """Retrieve all ingested documents for the authenticated user."""
-    user_id = str(user.get("_id", user.get("id")))
+    user_id = str(current_user["_id"])
     return await rag_service.list_user_documents(user_id=user_id)
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: str,
-    user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ) -> None:
     """Delete an ingested document and its vector chunks."""
-    user_id = str(user.get("_id", user.get("id")))
+    user_id = str(current_user["_id"])
     deleted = await rag_service.delete_document(user_id=user_id, document_id=document_id)
     if not deleted:
         raise HTTPException(
@@ -67,10 +67,10 @@ async def delete_document(
 @router.post("/query", response_model=RetrievalResult)
 async def query_knowledge_base(
     payload: RAGQueryRequest,
-    user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ) -> RetrievalResult:
     """Perform vector similarity search over knowledge base document chunks."""
-    user_id = str(user.get("_id", user.get("id")))
+    user_id = str(current_user["_id"])
     chunks = await rag_service.retrieve_context(
         user_id=user_id,
         query=payload.query,
@@ -87,10 +87,10 @@ async def query_knowledge_base(
 @router.post("/chat", response_model=RAGChatResponse)
 async def grounded_chat(
     payload: RAGChatRequest,
-    user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ) -> RAGChatResponse:
     """Ask a question and receive an AI answer grounded in retrieved document context."""
-    user_id = str(user.get("_id", user.get("id")))
+    user_id = str(current_user["_id"])
     try:
         return await rag_service.grounded_chat(
             user_id=user_id,

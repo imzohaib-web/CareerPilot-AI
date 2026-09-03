@@ -43,6 +43,10 @@ async def connect_db() -> None:
         await db.resumes.create_index("user_id")
         await db.skill_gap_analyses.create_index("user_id")
         await db.conversations.create_index("user_id")
+        await db.roadmaps.create_index("user_id")
+        await db.interviews.create_index("user_id")
+        await db.rag_documents.create_index("user_id")
+        await db.rag_chunks.create_index([("document_id", 1), ("user_id", 1)])
         logger.info("Connected to MongoDB database '%s'", config.MONGODB_NAME)
     except Exception as exc:
         _client = None

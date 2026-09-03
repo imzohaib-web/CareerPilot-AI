@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { describeApiError } from '../services/apiClient'
+import * as profileService from '../services/profile'
+import * as resumeService from '../services/resume'
 import * as skillGapService from '../services/skillGap'
 import type { SkillGapRequest, SkillGapResponse } from '../types'
 
@@ -23,6 +26,8 @@ export function SkillGapPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<SkillGapResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasResume, setHasResume] = useState(true)
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null)
 
   const loadLatest = useCallback(async () => {
     try {
@@ -33,9 +38,43 @@ export function SkillGapPage() {
     }
   }, [])
 
+  // Auto-fill from latest resume analysis and career profile.
+  const loadPrefill = useCallback(async () => {
+    try {
+      const [resumeDoc, profile] = await Promise.all([
+        resumeService.fetchLatestResume(),
+        profileService.fetchProfile(),
+      ])
+
+      if (!resumeDoc) {
+        setHasResume(false)
+      } else {
+        setHasResume(true)
+        const parts: string[] = []
+        if (resumeDoc.analysis.skills_detected.length > 0) {
+          parts.push(`Skills: ${resumeDoc.analysis.skills_detected.join(', ')}`)
+        }
+        if (resumeDoc.analysis.summary) {
+          parts.push(resumeDoc.analysis.summary)
+        }
+        if (parts.length > 0) {
+          setResumeData(parts.join('\n\n'))
+          setPrefillNotice('Auto-filled from your latest resume analysis')
+        }
+      }
+
+      if (profile?.target_role) {
+        setTargetRole((prev) => prev || profile.target_role)
+      }
+    } catch {
+      // Non-critical — user can still enter data manually.
+    }
+  }, [])
+
   useEffect(() => {
     loadLatest()
-  }, [loadLatest])
+    loadPrefill()
+  }, [loadLatest, loadPrefill])
 
   const canSubmit = resumeData.trim() && targetRole.trim() && targetJobDescription.trim() && !isLoading
 
@@ -66,6 +105,38 @@ export function SkillGapPage() {
       <p className="mt-1 text-sm text-slate-500">
         Compare your current profile against a target role and see the highest-priority gaps.
       </p>
+
+      {/* Prerequisite banner: no resume analyzed yet */}
+      {!hasResume && (
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-amber-800">No resume analyzed yet</p>
+            <p className="mt-0.5 text-xs text-amber-600">
+              Analyze your resume first to auto-populate your skills and get more accurate gap analysis.
+            </p>
+          </div>
+          <Link
+            to="/resume"
+            className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+          >
+            Analyze Resume
+          </Link>
+        </div>
+      )}
+
+      {/* Pre-fill notice */}
+      {prefillNotice && (
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-emerald-50 px-4 py-2.5">
+          <p className="text-xs font-medium text-emerald-700">✓ {prefillNotice}</p>
+          <button
+            type="button"
+            onClick={() => setPrefillNotice(null)}
+            className="text-xs text-emerald-500 hover:text-emerald-700"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_1.35fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -125,6 +196,24 @@ export function SkillGapPage() {
           )}
         </div>
       </div>
+
+      {/* Next step: generate roadmap from gaps */}
+      {result && (
+        <div className="mt-8 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-violet-800">Gaps identified — what's next?</p>
+            <p className="mt-0.5 text-xs text-violet-600">
+              Turn these skill gaps into a personalized, time-boxed learning roadmap.
+            </p>
+          </div>
+          <Link
+            to="/roadmap"
+            className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Generate Roadmap
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,32 +1,85 @@
-# React + TypeScript + Vite
+# CareerPilot AI — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + TypeScript frontend for [CareerPilot AI](../README.md), built with Vite and Tailwind CSS.
 
-Currently, two official plugins are available:
+## Getting Started
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```powershell
+# Install dependencies
+npm install
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# Start dev server (http://localhost:5173)
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The frontend connects to the backend at `http://localhost:8000` by default. Override with:
+
+```
+VITE_API_BASE_URL=http://your-backend-url
+```
+
+in a `.env` file (copy from `.env.example`).
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npx tsc --noEmit` | TypeScript type check (no output files) |
+| `npx oxlint` | Lint with oxlint |
+| `npx vite build` | Production build to `dist/` |
+
+## Project Structure
+
+```
+frontend/src/
+├── assets/          # Static assets (images, SVGs)
+├── components/      # Reusable React components
+│   └── chat/        # Chat-specific components (MessageContent)
+├── context/         # React Context providers (AuthContext for JWT state)
+├── hooks/           # Custom React hooks
+├── layouts/         # Page layouts (AppLayout with sidebar)
+├── pages/           # Route-level page components
+├── services/        # API client layer (Axios wrappers per module)
+└── types/           # TypeScript type definitions (index.ts)
+```
+
+## Pages
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/login` | LoginPage | User login (public) |
+| `/register` | RegisterPage | User registration (public) |
+| `/` | ProgressDashboardPage | Dashboard aggregating all modules |
+| `/profile` | ProfilePage | Career profile management |
+| `/resume` | ResumeAnalyzerPage | AI resume upload & analysis |
+| `/skill-gap` | SkillGapPage | Skill gap analysis (auto-fills from resume) |
+| `/roadmap` | RoadmapPage | Personalized learning roadmap |
+| `/mentor` | CareerMentorPage | AI career mentor chat |
+| `/interview` | MockInterviewPage | AI mock interview practice |
+| `/rag` | RagKnowledgePage | RAG knowledge base management |
+| `/ai-test` | AiTestPage | AI integration test page |
+
+All authenticated routes are wrapped in `ProtectedRoute` and redirect unauthenticated users to `/login`.
+
+## API Services
+
+All HTTP calls go through `services/apiClient.ts` (Axios with JWT interceptor). Each module has its own service file:
+
+- `auth.ts` — login, register, session
+- `profile.ts` — career profile CRUD
+- `resume.ts` — resume upload & analysis
+- `skillGap.ts` — skill gap analysis
+- `roadmap.ts` — roadmap generation & progress updates
+- `interview.ts` — mock interview start & submit
+- `chat.ts` — career mentor conversation
+- `rag.ts` — knowledge base documents & queries
+- `progress.ts` — dashboard progress aggregation
+- `ai.ts` — health check & model info
+
+## Conventions
+
+- **TypeScript** for all new code; no `any` unless justified
+- **No direct fetch/axios** in components — always use the service layer
+- **Tailwind utility classes** for styling; no inline layout styles
+- Every data-driven view handles **loading, error, and empty** states

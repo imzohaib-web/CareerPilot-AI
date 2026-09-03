@@ -9,7 +9,7 @@ without breaking the API.
 
 import asyncio
 import logging
-from unittest.mock import MagicMock
+from datetime import datetime
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -311,11 +311,7 @@ async def _count_resumes(oid: ObjectId) -> int:
 async def _fetch_latest_roadmap(oid: ObjectId) -> dict | None:
     """Fetch the user's most recent roadmap, or None."""
     try:
-        db = get_db()
-        # In unit test mocks where roadmaps isn't set, return None
-        if isinstance(db, MagicMock) and "roadmaps" not in db.__dict__:
-            return None
-        return await db.roadmaps.find_one(
+        return await get_db().roadmaps.find_one(
             {"user_id": oid}, sort=[("created_at", -1)]
         )
     except HTTPException:
@@ -329,10 +325,7 @@ async def _fetch_latest_roadmap(oid: ObjectId) -> dict | None:
 async def _fetch_latest_interview(oid: ObjectId) -> dict | None:
     """Fetch the user's most recent completed interview, or None."""
     try:
-        db = get_db()
-        if isinstance(db, MagicMock) and "interviews" not in db.__dict__:
-            return None
-        return await db.interviews.find_one(
+        return await get_db().interviews.find_one(
             {"user_id": oid, "status": "completed"},
             sort=[("completed_at", -1), ("created_at", -1)],
         )
@@ -355,10 +348,7 @@ async def _fetch_latest_interview(oid: ObjectId) -> dict | None:
 async def _count_interviews(oid: ObjectId) -> int:
     """Count total completed mock interviews for this user."""
     try:
-        db = get_db()
-        if isinstance(db, MagicMock) and "interviews" not in db.__dict__:
-            return 0
-        return await db.interviews.count_documents(
+        return await get_db().interviews.count_documents(
             {"user_id": oid, "status": "completed"}
         )
     except HTTPException:

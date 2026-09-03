@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { describeApiError } from '../services/apiClient'
 import * as profileService from '../services/profile'
@@ -392,6 +393,38 @@ export function RoadmapPage() {
                 onToggleTask={handleToggleTask}
               />
             ))}
+          </div>
+
+          {/* Next steps: mentor + interview */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
+              <div>
+                <p className="text-sm font-medium text-violet-800">Need guidance?</p>
+                <p className="mt-0.5 text-xs text-violet-600">
+                  Ask the AI Career Mentor about your roadmap.
+                </p>
+              </div>
+              <Link
+                to="/mentor"
+                className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Ask Mentor
+              </Link>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
+              <div>
+                <p className="text-sm font-medium text-violet-800">Ready to practice?</p>
+                <p className="mt-0.5 text-xs text-violet-600">
+                  Test your knowledge with an AI Mock Interview.
+                </p>
+              </div>
+              <Link
+                to="/interview"
+                className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Start Interview
+              </Link>
+            </div>
           </div>
         </div>
       )}

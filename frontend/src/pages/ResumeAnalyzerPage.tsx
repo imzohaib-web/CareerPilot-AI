@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { describeApiError } from '../services/apiClient'
 import * as resumeService from '../services/resume'
@@ -173,6 +174,24 @@ export function ResumeAnalyzerPage() {
 
       {/* Results */}
       {result && <AnalysisResults result={result} />}
+
+      {/* Next step: analyze skill gaps */}
+      {result && (
+        <div className="mt-8 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-violet-800">Resume analyzed — what's next?</p>
+            <p className="mt-0.5 text-xs text-violet-600">
+              Compare your skills against a target role to identify skill gaps.
+            </p>
+          </div>
+          <Link
+            to="/skill-gap"
+            className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Analyze Skill Gaps
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
