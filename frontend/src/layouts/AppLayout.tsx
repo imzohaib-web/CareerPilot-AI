@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Video,
   BookOpen,
-  Terminal,
   LogOut,
   Menu,
   X,
@@ -124,23 +123,6 @@ export function AppLayout() {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <NavLink
-              to="/ai-test"
-              title="Qwen Connectivity Diagnostic"
-              className={({ isActive }) =>
-                `hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition ${
-                  isActive
-                    ? 'bg-slate-100 text-slate-900 font-semibold'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`
-              }
-            >
-              <Terminal className="h-3.5 w-3.5 text-slate-400" />
-              <span>AI Test</span>
-            </NavLink>
-
-            <div className="h-4 w-px bg-slate-200 hidden md:block" />
-
             {/* User Profile Info */}
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-700">
@@ -217,15 +199,7 @@ export function AppLayout() {
               })}
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-              <Link
-                to="/ai-test"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
-              >
-                <Terminal className="h-3.5 w-3.5" />
-                <span>AI Connectivity Test</span>
-              </Link>
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-end">
               <button
                 type="button"
                 onClick={() => {

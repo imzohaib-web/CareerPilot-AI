@@ -35,12 +35,6 @@ export interface ProfilePayload {
   skills: string[]
 }
 
-export interface AITestResponse {
-  success: boolean
-  message: string
-  model: string
-}
-
 export interface HealthResponse {
   status: string
   database: string

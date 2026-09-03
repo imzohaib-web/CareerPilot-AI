@@ -3,7 +3,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { AppLayout } from './layouts/AppLayout'
-import { AiTestPage } from './pages/AiTestPage'
 import { CareerMentorPage } from './pages/CareerMentorPage'
 import { LoginPage } from './pages/LoginPage'
 import { MockInterviewPage } from './pages/MockInterviewPage'
@@ -37,7 +36,6 @@ function App() {
             <Route path="/mentor" element={<CareerMentorPage />} />
             <Route path="/interview" element={<MockInterviewPage />} />
             <Route path="/rag" element={<RagKnowledgePage />} />
-            <Route path="/ai-test" element={<AiTestPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
