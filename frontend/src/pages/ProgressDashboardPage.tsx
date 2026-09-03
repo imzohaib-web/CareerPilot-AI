@@ -121,7 +121,7 @@ export function ProgressDashboardPage() {
 
   if (!data) return null
 
-  const { profile, resume, overall_progress, readiness_score, next_steps } = data
+  const { profile, resume, roadmap, interview, overall_progress, readiness_score, next_steps } = data
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -174,10 +174,12 @@ export function ProgressDashboardPage() {
         </div>
       </div>
 
-      {/* Two-column status cards */}
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+      {/* Status cards */}
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <ProfileCard profile={profile} />
         <ResumeCard resume={resume} />
+        <RoadmapCard roadmap={roadmap} />
+        <InterviewCard interview={interview} />
       </div>
 
       {/* Skills */}
@@ -333,6 +335,137 @@ function ResumeCard({ resume }: { resume: DashboardResponse['resume'] }) {
             className="mt-3 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
           >
             Analyze Your Resume
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Roadmap Card ─────────────────────────────────────────────────────────
+
+function RoadmapCard({ roadmap }: { roadmap?: DashboardResponse['roadmap'] }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Learning Roadmap
+      </h3>
+
+      {roadmap?.has_roadmap ? (
+        <>
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600">Completion</span>
+              <span className="font-medium text-slate-900">{roadmap.completion_percentage}%</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${progressBarColor(roadmap.completion_percentage)}`}
+                style={{ width: `${roadmap.completion_percentage}%` }}
+              />
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm">
+            <span className="text-slate-500">Target: </span>
+            <span className="font-medium text-slate-800">{roadmap.target_role}</span>
+          </p>
+          <p className="mt-1 text-sm">
+            <span className="text-slate-500">Tasks: </span>
+            <span className="font-medium text-slate-800">
+              {roadmap.completed_tasks_count} of {roadmap.total_tasks} completed
+            </span>
+          </p>
+
+          <Link
+            to="/roadmap"
+            className="mt-4 inline-block text-sm font-medium text-violet-600 hover:text-violet-700"
+          >
+            {roadmap.completed_tasks_count < roadmap.total_tasks ? 'Continue roadmap →' : 'View roadmap →'}
+          </Link>
+        </>
+      ) : (
+        <div className="mt-4 rounded-xl bg-violet-50 p-4">
+          <p className="text-sm text-violet-700">
+            No roadmap generated yet. Turn your skill gaps into a step-by-step learning plan.
+          </p>
+          <Link
+            to="/roadmap"
+            className="mt-3 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Generate Roadmap
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Interview Card ──────────────────────────────────────────────────────
+
+function InterviewCard({ interview }: { interview?: DashboardResponse['interview'] }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Mock Interview
+      </h3>
+
+      {interview?.has_interview ? (
+        <>
+          <div className="mt-3 flex items-center gap-3">
+            <div
+              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 ${
+                interview.latest_score >= 75
+                  ? 'border-emerald-400'
+                  : interview.latest_score >= 50
+                    ? 'border-amber-400'
+                    : 'border-red-400'
+              }`}
+            >
+              <span className={`text-lg font-bold ${scoreColor(interview.latest_score)}`}>
+                {interview.latest_score}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900">
+                {interview.latest_score >= 75
+                  ? 'Interview ready'
+                  : interview.latest_score >= 50
+                    ? 'Getting there'
+                    : 'Needs practice'}
+              </p>
+              <p className="text-xs text-slate-400">Latest score</p>
+            </div>
+          </div>
+
+          {interview.target_role && (
+            <p className="mt-4 text-sm">
+              <span className="text-slate-500">Role: </span>
+              <span className="font-medium text-slate-800">{interview.target_role}</span>
+            </p>
+          )}
+          <p className="mt-1 text-sm">
+            <span className="text-slate-500">Sessions: </span>
+            <span className="font-medium text-slate-800">{interview.total_interviews}</span>
+          </p>
+
+          <Link
+            to="/interview"
+            className="mt-4 inline-block text-sm font-medium text-violet-600 hover:text-violet-700"
+          >
+            {interview.latest_score < 70 ? 'Practice again →' : 'View results →'}
+          </Link>
+        </>
+      ) : (
+        <div className="mt-4 rounded-xl bg-violet-50 p-4">
+          <p className="text-sm text-violet-700">
+            No mock interview yet. Practice with AI-powered interview simulation.
+          </p>
+          <Link
+            to="/interview"
+            className="mt-3 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Start Interview
           </Link>
         </div>
       )}

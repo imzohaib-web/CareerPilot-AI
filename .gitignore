@@ -12,3 +12,6 @@ venv/
 .venv/
 dist/
 .DS_Store
+scratch/
+test_endpoint.py
+

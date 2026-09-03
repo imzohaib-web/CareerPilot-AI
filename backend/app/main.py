@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app import config
 from app.database.mongodb import close_db, connect_db, get_db
-from app.routes import ai, auth, profile, progress, resume
+from app.routes import ai, auth, interview, profile, progress, rag, resume, roadmap, skill_gap
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +36,10 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(ai.router)
 app.include_router(resume.router)
+app.include_router(skill_gap.router)
+app.include_router(roadmap.router)
+app.include_router(interview.router)
+app.include_router(rag.router)
 app.include_router(progress.router)
 
 

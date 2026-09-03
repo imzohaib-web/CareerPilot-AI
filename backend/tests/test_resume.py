@@ -291,6 +291,7 @@ class TestResumeRoutes:
     @pytest.mark.asyncio
     async def test_analyze_requires_auth(self):
         """Unauthenticated request must return 401/403."""
+        app.dependency_overrides.clear()
         async with _make_api_client() as client:
             resp = await client.post(
                 "/api/resume/analyze",

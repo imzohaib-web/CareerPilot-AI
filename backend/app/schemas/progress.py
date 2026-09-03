@@ -30,6 +30,26 @@ class ResumeProgress(BaseModel):
     total_analyses: int = 0
 
 
+class RoadmapProgress(BaseModel):
+    """Roadmap learning progress summary."""
+
+    has_roadmap: bool = False
+    title: str = ""
+    target_role: str = ""
+    total_tasks: int = 0
+    completed_tasks_count: int = 0
+    completion_percentage: int = Field(default=0, ge=0, le=100)
+
+
+class InterviewProgress(BaseModel):
+    """Mock interview practice progress summary."""
+
+    has_interview: bool = False
+    latest_score: int = Field(default=0, ge=0, le=100)
+    total_interviews: int = 0
+    target_role: str = ""
+
+
 class NextStep(BaseModel):
     """An actionable next step for the user."""
 
@@ -43,6 +63,8 @@ class DashboardResponse(BaseModel):
 
     profile: ProfileProgress = Field(default_factory=ProfileProgress)
     resume: ResumeProgress = Field(default_factory=ResumeProgress)
+    roadmap: RoadmapProgress = Field(default_factory=RoadmapProgress)
+    interview: InterviewProgress = Field(default_factory=InterviewProgress)
     readiness_score: int = Field(default=0, ge=0, le=100)
     overall_progress: int = Field(default=0, ge=0, le=100)
     next_steps: list[NextStep] = Field(default_factory=list)

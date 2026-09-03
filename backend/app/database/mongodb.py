@@ -5,6 +5,7 @@ shutdown. Services obtain the database through ``get_db``.
 """
 
 import logging
+import dns.resolver
 
 from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -12,6 +13,14 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app import config
 
 logger = logging.getLogger(__name__)
+
+# Configure DNS resolver to use Google DNS fallback if local system DNS fails SRV lookups
+try:
+    resolver = dns.resolver.Resolver(configure=True)
+    resolver.nameservers = ['8.8.8.8', '1.1.1.1'] + resolver.nameservers
+    dns.resolver.default_resolver = resolver
+except Exception:
+    pass
 
 _client: AsyncIOMotorClient | None = None
 
@@ -22,20 +31,21 @@ async def connect_db() -> None:
     if _client is not None:
         return
     if not config.MONGODB_URI:
-        raise RuntimeError("MONGODB_URI is not configured in the environment")
+        logger.warning("MONGODB_URI is not configured; running in offline mode")
+        return
 
-    _client = AsyncIOMotorClient(config.MONGODB_URI, serverSelectionTimeoutMS=5000)
     try:
+        _client = AsyncIOMotorClient(config.MONGODB_URI, serverSelectionTimeoutMS=5000)
         await _client.admin.command("ping")
+        db = _client[config.MONGODB_NAME]
+        await db.users.create_index("email", unique=True)
+        await db.career_profiles.create_index("user_id", unique=True)
+        await db.resumes.create_index("user_id")
+        await db.skill_gap_analyses.create_index("user_id")
+        logger.info("Connected to MongoDB database '%s'", config.MONGODB_NAME)
     except Exception as exc:
         _client = None
-        raise RuntimeError(f"Could not connect to MongoDB: {exc}") from exc
-
-    db = _client[config.MONGODB_NAME]
-    await db.users.create_index("email", unique=True)
-    await db.career_profiles.create_index("user_id", unique=True)
-    await db.resumes.create_index("user_id")
-    logger.info("Connected to MongoDB database '%s'", config.MONGODB_NAME)
+        logger.warning("Could not connect to MongoDB: %s (running in offline mode)", exc)
 
 
 async def close_db() -> None:

@@ -5,10 +5,14 @@ import { AuthProvider } from './context/AuthContext'
 import { AppLayout } from './layouts/AppLayout'
 import { AiTestPage } from './pages/AiTestPage'
 import { LoginPage } from './pages/LoginPage'
+import { MockInterviewPage } from './pages/MockInterviewPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProgressDashboardPage } from './pages/ProgressDashboardPage'
+import { RagKnowledgePage } from './pages/RagKnowledgePage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ResumeAnalyzerPage } from './pages/ResumeAnalyzerPage'
+import { RoadmapPage } from './pages/RoadmapPage'
+import { SkillGapPage } from './pages/SkillGapPage'
 
 function App() {
   return (
@@ -27,6 +31,10 @@ function App() {
             <Route path="/" element={<ProgressDashboardPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/resume" element={<ResumeAnalyzerPage />} />
+            <Route path="/skill-gap" element={<SkillGapPage />} />
+            <Route path="/roadmap" element={<RoadmapPage />} />
+            <Route path="/interview" element={<MockInterviewPage />} />
+            <Route path="/rag" element={<RagKnowledgePage />} />
             <Route path="/ai-test" element={<AiTestPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

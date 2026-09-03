@@ -19,6 +19,9 @@ from app.services.ai.qwen_service import AIServiceError
 
 logger = logging.getLogger(__name__)
 
+# In-memory cache for offline mode (user_id -> latest resume document)
+_offline_resumes: dict[str, dict] = {}
+
 # ── Public exceptions ─────────────────────────────────────────────────────
 
 
@@ -151,6 +154,7 @@ async def upload_and_analyze(
 
     now = datetime.now(timezone.utc)
     document = {
+        "_id": ObjectId(),
         "user_id": ObjectId(user_id),
         "filename": filename,
         "stored_path": "",  # MVP: file not kept on disk
@@ -161,30 +165,43 @@ async def upload_and_analyze(
         "analyzed_at": now,
     }
 
+    # Try to save to database; fall back to in-memory cache on offline
     try:
         result = await get_db().resumes.insert_one(document)
+        document["_id"] = result.inserted_id
     except Exception as exc:
-        logger.error("MongoDB insert failed for resume: %s", exc)
-        raise ResumeValidationError("Failed to save the resume analysis.") from exc
+        logger.warning("Could not save resume to database (%s); using in-memory cache", exc)
+        _offline_resumes[user_id] = document
 
-    document["_id"] = result.inserted_id
     return _serialize(document, analysis, model)
 
 
 async def get_latest_analysis(user_id: str) -> ResumeAnalysisResponse | None:
     """Return the most recent resume analysis for this user, or None."""
-    doc = await get_db().resumes.find_one(
-        {"user_id": ObjectId(user_id)}, sort=[("analyzed_at", -1)]
-    )
-    if doc is None:
-        return None
-
+    # Try database first
     try:
-        analysis = ResumeAnalysis.model_validate(doc.get("analysis", {}))
-    except Exception:
-        analysis = ResumeAnalysis()
+        doc = await get_db().resumes.find_one(
+            {"user_id": ObjectId(user_id)}, sort=[("analyzed_at", -1)]
+        )
+        if doc is not None:
+            try:
+                analysis = ResumeAnalysis.model_validate(doc.get("analysis", {}))
+            except Exception:
+                analysis = ResumeAnalysis()
+            return _serialize(doc, analysis, doc.get("model", "unknown"))
+    except Exception as exc:
+        logger.debug("Could not fetch resume from database (%s); checking cache", exc)
 
-    return _serialize(doc, analysis, doc.get("model", "unknown"))
+    # Check offline cache
+    if user_id in _offline_resumes:
+        doc = _offline_resumes[user_id]
+        try:
+            analysis = ResumeAnalysis.model_validate(doc.get("analysis", {}))
+        except Exception:
+            analysis = ResumeAnalysis()
+        return _serialize(doc, analysis, doc.get("model", "unknown"))
+
+    return None
 
 
 # ── Serialization ─────────────────────────────────────────────────────────

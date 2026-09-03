@@ -96,6 +96,85 @@ export interface ResumeAnalysisResponse {
   model: string
 }
 
+// ── Skill Gap Analyzer ───────────────────────────────────────────────────
+
+export interface RequiredProficiency {
+  area: string
+  skills: string[]
+}
+
+export interface SkillGapAnalysis {
+  summary: string
+  missing_technical_skills: string[]
+  missing_soft_skills: string[]
+  required_proficiencies: RequiredProficiency[]
+  match_score: number
+}
+
+export interface SkillGapRequest {
+  resume_data: string
+  target_role: string
+  target_job_description: string
+}
+
+export interface SkillGapResponse {
+  id: string
+  user_id: string
+  target_role: string
+  target_job_description: string
+  analysis: SkillGapAnalysis
+  created_at: string
+}
+
+// ── Roadmap Generator ───────────────────────────────────────────────────
+
+export interface RoadmapTask {
+  id: string
+  title: string
+  skill: string
+  description: string
+  action: string
+  resource: string
+  milestone: string
+  estimated_hours: number
+}
+
+export interface RoadmapPhase {
+  phase_number: number
+  name: string
+  duration_weeks: number
+  focus: string
+  tasks: RoadmapTask[]
+}
+
+export interface RoadmapContent {
+  title: string
+  target_role: string
+  total_duration_weeks: number
+  summary: string
+  phases: RoadmapPhase[]
+}
+
+export interface RoadmapRequest {
+  target_role: string
+  skill_gaps: string[]
+  time_frame_weeks: number
+  weekly_hours: number
+  experience_level?: string
+  additional_context?: string
+}
+
+export interface RoadmapResponse {
+  id: string
+  user_id: string
+  target_role: string
+  time_frame_weeks: number
+  weekly_hours: number
+  roadmap: RoadmapContent
+  completed_tasks: string[]
+  created_at: string
+}
+
 // ── Progress Dashboard ──────────────────────────────────────────────────
 
 export interface ProfileProgress {
@@ -119,6 +198,15 @@ export interface ResumeProgress {
   total_analyses: number
 }
 
+export interface RoadmapProgress {
+  has_roadmap: boolean
+  title: string
+  target_role: string
+  total_tasks: number
+  completed_tasks_count: number
+  completion_percentage: number
+}
+
 export interface NextStep {
   label: string
   action: string
@@ -128,7 +216,131 @@ export interface NextStep {
 export interface DashboardResponse {
   profile: ProfileProgress
   resume: ResumeProgress
+  roadmap?: RoadmapProgress
+  interview?: InterviewProgress
   readiness_score: number
   overall_progress: number
   next_steps: NextStep[]
 }
+
+// ── Mock Interview ───────────────────────────────────────────────────────
+
+export interface InterviewQuestion {
+  id: string
+  question: string
+  category: 'technical' | 'behavioral' | 'situational' | string
+  hint: string
+}
+
+export interface UserAnswer {
+  question_id: string
+  answer: string
+}
+
+export interface QuestionEvaluation {
+  question_id: string
+  score: number
+  strengths: string[]
+  improvements: string[]
+  ideal_answer: string
+}
+
+export interface InterviewFeedback {
+  overall_score: number
+  summary: string
+  evaluations: QuestionEvaluation[]
+  recommended_actions: string[]
+}
+
+export interface InterviewStartRequest {
+  target_role: string
+  experience_level?: string
+  question_count: number
+  focus_skills: string[]
+}
+
+export interface InterviewSubmitRequest {
+  answers: UserAnswer[]
+}
+
+export interface InterviewResponse {
+  id: string
+  user_id: string
+  target_role: string
+  experience_level: string
+  questions: InterviewQuestion[]
+  answers: UserAnswer[]
+  feedback?: InterviewFeedback | null
+  status: 'in_progress' | 'completed' | string
+  created_at: string
+  completed_at?: string | null
+}
+
+export interface InterviewProgress {
+  has_interview: boolean
+  latest_score: number
+  total_interviews: number
+  target_role: string
+}
+
+// ── RAG & Knowledge Base ──
+
+export interface DocumentIngestRequest {
+  title: string
+  content: string
+  category?: 'job_description' | 'interview_guide' | 'skill_framework' | 'general'
+  metadata?: Record<string, unknown>
+}
+
+export interface DocumentInfo {
+  id: string
+  user_id: string
+  title: string
+  category: string
+  chunk_count: number
+  content_length: number
+  created_at: string
+}
+
+export interface DocumentUploadResponse {
+  document_id: string
+  title: string
+  chunk_count: number
+  message: string
+}
+
+export interface RAGQueryRequest {
+  query: string
+  top_k?: number
+  category_filter?: string
+}
+
+export interface ChunkSource {
+  chunk_id: string
+  document_id: string
+  document_title: string
+  chunk_index: number
+  content: string
+  similarity_score: number
+}
+
+export interface RetrievalResult {
+  query: string
+  chunks: ChunkSource[]
+  total_retrieved: number
+}
+
+export interface RAGChatRequest {
+  message: string
+  top_k?: number
+  document_ids?: string[]
+}
+
+export interface RAGChatResponse {
+  reply: string
+  sources: ChunkSource[]
+  model_used: string
+}
+
+
+
