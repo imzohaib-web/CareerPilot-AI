@@ -1,4 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Video,
+  Mic,
+  MicOff,
+  VideoOff,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  ArrowRight,
+  RefreshCw,
+  CheckCircle2,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+} from 'lucide-react'
 
 import { describeApiError } from '../services/apiClient'
 import * as interviewService from '../services/interview'
@@ -15,31 +31,29 @@ import type {
 function scoreColor(score: number): string {
   if (score >= 75) return 'text-emerald-600'
   if (score >= 50) return 'text-amber-600'
-  return 'text-red-600'
+  return 'text-rose-600'
 }
 
-function scoreRingColor(score: number): string {
-  if (score >= 75) return 'border-emerald-500 bg-emerald-50'
-  if (score >= 50) return 'border-amber-500 bg-amber-50'
-  return 'border-red-500 bg-red-50'
+function scoreBg(score: number): string {
+  if (score >= 75) return 'bg-emerald-50 border-emerald-200'
+  if (score >= 50) return 'bg-amber-50 border-amber-200'
+  return 'bg-rose-50 border-rose-200'
 }
 
-function categoryBadge(cat: string): string {
+function categoryBadge(cat: string): { bg: string; color: string } {
   switch (cat) {
     case 'technical':
-      return 'bg-blue-100 text-blue-800'
+      return { bg: 'bg-indigo-50 border-indigo-200', color: 'text-indigo-700' }
     case 'behavioral':
-      return 'bg-purple-100 text-purple-800'
+      return { bg: 'bg-purple-50 border-purple-200', color: 'text-purple-700' }
     case 'situational':
-      return 'bg-teal-100 text-teal-800'
+      return { bg: 'bg-teal-50 border-teal-200', color: 'text-teal-700' }
     default:
-      return 'bg-gray-100 text-gray-700'
+      return { bg: 'bg-slate-100 border-slate-200', color: 'text-slate-700' }
   }
 }
 
 type InterviewMode = 'video' | 'voice' | 'text'
-
-/* ── component ──────────────────────────────────────────────────────────── */
 
 export function MockInterviewPage() {
   // ── lobby / config ──
@@ -59,7 +73,6 @@ export function MockInterviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [importNotice, setImportNotice] = useState<string | null>(null)
   const [expandedHint, setExpandedHint] = useState<string | null>(null)
-  const [expandedEval, setExpandedEval] = useState<string | null>(null)
 
   // ── media ──
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -68,7 +81,7 @@ export function MockInterviewPage() {
   const [micOn, setMicOn] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  const recognitionRef = useRef</* SpeechRecognition */ unknown>(null)
+  const recognitionRef = useRef<unknown>(null)
 
   // ── load previous ──
   const loadLatest = useCallback(async () => {
@@ -76,7 +89,7 @@ export function MockInterviewPage() {
       const prev = await interviewService.fetchLatestInterview()
       if (prev) setInterview(prev)
     } catch {
-      /* no previous interview — that's fine */
+      /* no previous interview */
     }
   }, [])
 
@@ -115,7 +128,7 @@ export function MockInterviewPage() {
       }
       setCameraOn(true)
     } catch {
-      setError('Camera access denied. Please allow camera permissions.')
+      setError('Camera access denied. Please verify your browser camera permissions.')
     }
   }
 
@@ -138,835 +151,784 @@ export function MockInterviewPage() {
             t.enabled = true
           })
         } else {
-          const audioStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          audioStream.getAudioTracks().forEach((t) => {
+            mediaStreamRef.current?.addTrack(t)
           })
-          audioStream
-            .getAudioTracks()
-            .forEach((t) => mediaStreamRef.current?.addTrack(t))
         }
       }
       setMicOn(true)
     } catch {
-      setError('Microphone access denied. Please allow microphone permissions.')
+      setError('Microphone access denied. Please verify your microphone permissions.')
     }
   }
 
-  /* ── speech-to-text (voice answering) ───────────────────────────────── */
+  /* ── speech recognition (Web Speech API) ──────────────────────────────── */
 
-  function startVoiceInput(questionId: string) {
+  function toggleSpeechRecognition(questionId: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any
-    const SpeechRecognitionCtor =
-      win.SpeechRecognition ?? win.webkitSpeechRecognition
-    if (!SpeechRecognitionCtor) {
-      setError('Speech recognition is not supported in this browser.')
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setError('Speech recognition is not supported in this browser. Please type your answer.')
       return
     }
-    const recognition = new SpeechRecognitionCtor()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      let transcript = ''
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript
+    if (isListening) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(recognitionRef.current as any)?.stop()
+      setIsListening(false)
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (event: any) => {
+        let transcript = ''
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript + ' '
+        }
+        setAnswers((prev) => ({
+          ...prev,
+          [questionId]: (prev[questionId] ? prev[questionId] + ' ' : '') + transcript.trim(),
+        }))
       }
-      setAnswers((prev) => ({ ...prev, [questionId]: transcript }))
-    }
-    recognition.onerror = () => {
-      setIsListening(false)
-    }
-    recognition.onend = () => {
-      setIsListening(false)
-    }
 
-    recognitionRef.current = recognition
-    recognition.start()
-    setIsListening(true)
+      recognition.onerror = () => {
+        setIsListening(false)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+      }
+
+      recognitionRef.current = recognition
+      recognition.start()
+      setIsListening(true)
+    } catch {
+      setError('Could not start speech recognition.')
+    }
   }
 
-  function stopVoiceInput() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(recognitionRef.current as any)?.stop?.()
-    setIsListening(false)
-  }
-
-  /* ── text-to-speech (AI reads question) ─────────────────────────────── */
+  /* ── text to speech (AI reads question) ──────────────────────────────── */
 
   function speakQuestion(text: string) {
-    if (!window.speechSynthesis) {
+    if (!('speechSynthesis' in window)) {
       setError('Text-to-speech is not supported in this browser.')
       return
     }
-    window.speechSynthesis.cancel()
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.95
     utterance.pitch = 1.0
-    utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
     utterance.onerror = () => setIsSpeaking(false)
+
+    setIsSpeaking(true)
     window.speechSynthesis.speak(utterance)
   }
 
-  /* ── import from profile / skill gap ────────────────────────────────── */
+  /* ── import from profile / gap ───────────────────────────────────────── */
 
-  async function handleImport() {
+  async function handleImportContext() {
     setIsImporting(true)
     setError(null)
     setImportNotice(null)
     try {
-      const gapDoc = await skillGapService.fetchLatestSkillGap()
-      if (gapDoc) {
-        setTargetRole(gapDoc.target_role)
-        const skills = [
-          ...gapDoc.analysis.missing_technical_skills,
-          ...gapDoc.analysis.missing_soft_skills,
-        ]
-        setFocusSkills(skills.join(', '))
-        setImportNotice('Imported from Skill Gap Analysis ✓')
-        setIsImporting(false)
-        return
-      }
-    } catch {
-      /* fallthrough to profile */
-    }
-    try {
-      const profile = await profileService.fetchProfile()
+      const [profile, gap] = await Promise.all([
+        profileService.fetchProfile().catch(() => null),
+        skillGapService.fetchLatestSkillGap().catch(() => null),
+      ])
+
       if (profile) {
         setTargetRole(profile.target_role || '')
-        setFocusSkills((profile.skills || []).join(', '))
         setExperienceLevel(profile.experience_level || 'student')
-        setImportNotice('Imported from Career Profile ✓')
+        if (profile.skills.length > 0) {
+          setFocusSkills(profile.skills.slice(0, 5).join(', '))
+        }
+        setImportNotice(`Imported profile (${profile.target_role || 'General'})`)
       }
-    } catch {
-      setError('No profile or skill gap analysis found to import.')
+
+      if (gap) {
+        const missing = [
+          ...gap.analysis.missing_technical_skills,
+          ...gap.analysis.missing_soft_skills,
+        ]
+        if (missing.length > 0) {
+          setFocusSkills(missing.slice(0, 5).join(', '))
+          setImportNotice((prev) => (prev ? `${prev} + Skill Gaps` : 'Imported from Skill Gap'))
+        }
+      }
+    } catch (err) {
+      setError(describeApiError(err).message)
+    } finally {
+      setIsImporting(false)
     }
-    setIsImporting(false)
   }
 
-  /* ── start interview ────────────────────────────────────────────────── */
+  /* ── generate interview ──────────────────────────────────────────────── */
 
-  async function handleStart() {
+  async function handleStartInterview() {
     if (!targetRole.trim()) {
-      setError('Please enter a target role.')
+      setError('Please provide a target role for the interview.')
       return
     }
+
     setIsLoading(true)
     setError(null)
+    setImportNotice(null)
+
+    const skillsList = focusSkills
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+
     try {
-      const resp = await interviewService.startInterview({
+      const res = await interviewService.startInterview({
         target_role: targetRole.trim(),
         experience_level: experienceLevel,
         question_count: questionCount,
-        focus_skills: focusSkills
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        focus_skills: skillsList,
       })
-      setInterview(resp)
-      setAnswers({})
+
+      setInterview(res)
       setCurrentIdx(0)
-      // Auto-speak first question
-      if (mode !== 'text' && resp.questions.length > 0) {
-        setTimeout(() => speakQuestion(resp.questions[0].question), 500)
-      }
-      // Auto-start camera in video mode
-      if (mode === 'video' && !cameraOn) {
+      setAnswers({})
+      setExpandedHint(null)
+
+      if (mode === 'video') {
         toggleCamera()
       }
     } catch (err) {
       setError(describeApiError(err).message)
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
-  /* ── submit answers ─────────────────────────────────────────────────── */
+  /* ── submit answers for AI evaluation ────────────────────────────────── */
 
-  async function handleSubmit() {
+  async function handleSubmitInterview() {
     if (!interview) return
+
     setIsSubmitting(true)
     setError(null)
-    stopVoiceInput()
-    window.speechSynthesis?.cancel()
+
+    const payloadAnswers: UserAnswer[] = interview.questions.map((q) => ({
+      question_id: q.id,
+      answer: answers[q.id]?.trim() || '',
+    }))
+
     try {
-      const answerPayload: UserAnswer[] = interview.questions.map((q) => ({
-        question_id: q.id,
-        answer: answers[q.id] || '',
-      }))
-      const resp = await interviewService.submitInterview(interview.id, {
-        answers: answerPayload,
+      const evaluated = await interviewService.submitInterview(interview.id, {
+        answers: payloadAnswers,
       })
-      setInterview(resp)
-      // Stop camera after submission
+      setInterview(evaluated)
+
+      // Stop camera / mic after completion
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
       setCameraOn(false)
+      setMicOn(false)
     } catch (err) {
       setError(describeApiError(err).message)
-    }
-    setIsSubmitting(false)
-  }
-
-  /* ── navigate questions ─────────────────────────────────────────────── */
-
-  function goToQuestion(idx: number) {
-    stopVoiceInput()
-    setCurrentIdx(idx)
-    if (
-      mode !== 'text' &&
-      interview?.questions[idx]
-    ) {
-      setTimeout(() => speakQuestion(interview.questions[idx].question), 300)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  function handleRetake() {
-    setInterview(null)
-    setAnswers({})
-    setCurrentIdx(0)
-    setError(null)
-    mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
-    setCameraOn(false)
-    setMicOn(false)
-  }
-
-  const currentQuestion: InterviewQuestion | undefined =
-    interview?.questions[currentIdx]
-  const isActiveInterview =
-    interview?.status === 'in_progress' && interview.questions.length > 0
-  const isCompleted = interview?.status === 'completed' && interview.feedback
-
-  /* ───────────────────────────────────────────────────────────────────── */
-  /* ── RENDER ─────────────────────────────────────────────────────────── */
-  /* ───────────────────────────────────────────────────────────────────── */
+  const questions = interview?.questions || []
+  const currentQ: InterviewQuestion | undefined = questions[currentIdx]
+  const isEvaluated = interview?.status === 'evaluated'
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <span className="text-3xl">🎙️</span>
+    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            AI Mock Interview
+          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
+            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+            <span>Alibaba Cloud Qwen AI Simulator</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+            AI Mock Interview Studio
           </h1>
-          <p className="text-sm text-gray-500">
-            Practice realistic interviews with AI-powered question generation,
-            voice interaction, and STAR evaluation
+          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
+            Simulate realistic technical and behavioral interviews with real-time video/voice support and deep AI scoring.
           </p>
         </div>
+
+        {interview && (
+          <button
+            type="button"
+            onClick={() => {
+              setInterview(null)
+              setCurrentIdx(0)
+              setAnswers({})
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition self-start sm:self-auto"
+          >
+            <RefreshCw className="h-4 w-4 text-slate-500" />
+            <span>New Simulation</span>
+          </button>
+        )}
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          ⚠️ {error}
-        </div>
-      )}
+      {/* ── Setup Lobby (when no active session) ─────────────────────────── */}
+      {!interview && (
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Configure Interview Simulation</h2>
+              <p className="text-xs text-slate-500">
+                Choose your role, level, question format, and interview mode.
+              </p>
+            </div>
 
-      {/* ═══════════════ LOBBY / CONFIG ═══════════════ */}
-      {!isActiveInterview && !isCompleted && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">
-              🏢 Interview Setup
-            </h2>
             <button
-              onClick={handleImport}
+              type="button"
+              onClick={handleImportContext}
               disabled={isImporting}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-50 border border-brand-200 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition shrink-0"
             >
-              {isImporting ? '⏳ Importing…' : '⚡ Import from Profile / Skill Gap'}
+              <Zap className="h-3.5 w-3.5 text-brand-600" />
+              <span>{isImporting ? 'Importing…' : 'Import from Profile & Gap'}</span>
             </button>
           </div>
 
           {importNotice && (
-            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-              {importNotice}
+            <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>{importNotice}</span>
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 text-xs">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Target Role *
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Target Role <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value)}
-                placeholder="e.g. Backend Engineer"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="e.g. Senior Frontend Engineer, DevOps Engineer"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
               />
             </div>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Experience Level
-              </label>
+              <label className="block font-bold text-slate-700 mb-1.5">Experience Level</label>
               <select
                 value={experienceLevel}
                 onChange={(e) => setExperienceLevel(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
               >
-                <option value="student">Student / Fresh Graduate</option>
-                <option value="junior">Junior (0-2 years)</option>
-                <option value="mid">Mid-Level (2-5 years)</option>
-                <option value="senior">Senior (5+ years)</option>
+                <option value="student">Student / Intern</option>
+                <option value="fresh-graduate">Fresh Graduate (0-1 yrs)</option>
+                <option value="early-career">Early Career (1-3 yrs)</option>
+                <option value="mid-level">Mid Level (3-5 yrs)</option>
+                <option value="senior">Senior (5+ yrs)</option>
               </select>
             </div>
-          </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Focus Skills / Topics
-            </label>
-            <input
-              type="text"
-              value={focusSkills}
-              onChange={(e) => setFocusSkills(e.target.value)}
-              placeholder="e.g. Python, FastAPI, System Design"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Number of Questions: {questionCount}
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Focus Skills / Topics (Optional)
               </label>
               <input
+                type="text"
+                value={focusSkills}
+                onChange={(e) => setFocusSkills(e.target.value)}
+                placeholder="e.g. React, System Design, REST APIs, Leadership"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between font-bold text-slate-700">
+                <span>Number of Questions</span>
+                <span className="text-brand-600">{questionCount} Questions</span>
+              </div>
+              <input
                 type="range"
-                min={1}
+                min={2}
                 max={5}
+                step={1}
                 value={questionCount}
                 onChange={(e) => setQuestionCount(Number(e.target.value))}
-                className="w-full accent-blue-600"
+                className="w-full accent-brand-600 cursor-pointer"
               />
-              <div className="mt-1 flex justify-between text-xs text-gray-400">
-                <span>1</span>
-                <span>3</span>
-                <span>5</span>
+              <div className="flex justify-between text-[10px] text-slate-400">
+                <span>2 (Quick)</span>
+                <span>3 (Standard)</span>
+                <span>5 (Comprehensive)</span>
               </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Interview Mode
-              </label>
-              <div className="flex gap-2">
-                {(
-                  [
-                    { id: 'video', label: '🎥 Video', desc: 'Camera + Voice' },
-                    { id: 'voice', label: '🎙️ Voice', desc: 'Voice Only' },
-                    { id: 'text', label: '⌨️ Text', desc: 'Silent / Quiet' },
-                  ] as const
-                ).map((m) => (
+          </div>
+
+          {/* Mode Selector */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <span className="block text-xs font-bold text-slate-700">Interview Mode</span>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { id: 'video' as const, label: 'Video Studio', desc: 'Camera + Audio + Speech-to-Text', icon: Video },
+                { id: 'voice' as const, label: 'Voice Mode', desc: 'Audio recording & Voice dictation', icon: Mic },
+                { id: 'text' as const, label: 'Text Focus', desc: 'Fast written response mode', icon: Sparkles },
+              ].map((m) => {
+                const Icon = m.icon
+                const isSelected = mode === m.id
+                return (
                   <button
                     key={m.id}
+                    type="button"
                     onClick={() => setMode(m.id)}
-                    className={`flex-1 rounded-lg border px-3 py-2 text-center text-xs font-medium transition ${
-                      mode === m.id
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    className={`flex flex-col items-start rounded-2xl border p-4 text-left transition ${
+                      isSelected
+                        ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-500/20 shadow-xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
                   >
-                    <div>{m.label}</div>
-                    <div className="mt-0.5 text-[10px] opacity-70">{m.desc}</div>
+                    <Icon className={`h-5 w-5 mb-2 ${isSelected ? 'text-brand-600' : 'text-slate-400'}`} />
+                    <span className="text-xs font-bold text-slate-900">{m.label}</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">{m.desc}</span>
                   </button>
-                ))}
-              </div>
+                )
+              })}
             </div>
           </div>
 
-          <button
-            onClick={handleStart}
-            disabled={isLoading || !targetRole.trim()}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
-          >
-            {isLoading ? (
-              <span className="inline-flex items-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="60 20" />
-                </svg>
-                Generating Questions…
-              </span>
-            ) : (
-              '🚀 Start Mock Interview'
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* ═══════════════ ACTIVE INTERVIEW STUDIO ═══════════════ */}
-      {isActiveInterview && currentQuestion && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* LEFT PANEL — Question & Answer */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Progress stepper */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-700">
-                  Question {currentIdx + 1} of {interview.questions.length}
-                </h2>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${categoryBadge(currentQuestion.category)}`}
-                >
-                  {currentQuestion.category}
-                </span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
-                <div
-                  className="h-2 rounded-full bg-blue-500 transition-all duration-300"
-                  style={{
-                    width: `${((currentIdx + 1) / interview.questions.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Question card */}
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-base font-medium text-gray-900 leading-relaxed">
-                  {currentQuestion.question}
-                </p>
-                {mode !== 'text' && (
-                  <button
-                    onClick={() => speakQuestion(currentQuestion.question)}
-                    disabled={isSpeaking}
-                    className={`flex-shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                      isSpeaking
-                        ? 'border-blue-300 bg-blue-50 text-blue-600 animate-pulse'
-                        : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
-                    }`}
-                    title="Listen to question"
-                  >
-                    {isSpeaking ? '🔊 Speaking…' : '🔊 Listen'}
-                  </button>
-                )}
-              </div>
-
-              {/* Hint drawer */}
-              {currentQuestion.hint && (
-                <div>
-                  <button
-                    onClick={() =>
-                      setExpandedHint(
-                        expandedHint === currentQuestion.id
-                          ? null
-                          : currentQuestion.id
-                      )
-                    }
-                    className="text-xs font-medium text-blue-600 hover:underline"
-                  >
-                    {expandedHint === currentQuestion.id
-                      ? '▼ Hide Tip'
-                      : '💡 Show Tip / STAR Guidance'}
-                  </button>
-                  {expandedHint === currentQuestion.id && (
-                    <div className="mt-2 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
-                      {currentQuestion.hint}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Answer input */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">
-                    Your Answer
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {mode !== 'text' && (
-                      <button
-                        onClick={() =>
-                          isListening
-                            ? stopVoiceInput()
-                            : startVoiceInput(currentQuestion.id)
-                        }
-                        className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                          isListening
-                            ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        {isListening ? '⏹️ Stop Recording' : '🎤 Speak Answer'}
-                      </button>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {(answers[currentQuestion.id] || '').split(/\s+/).filter(Boolean).length} words
-                    </span>
-                  </div>
-                </div>
-                <textarea
-                  rows={6}
-                  value={answers[currentQuestion.id] || ''}
-                  onChange={(e) =>
-                    setAnswers((prev) => ({
-                      ...prev,
-                      [currentQuestion.id]: e.target.value,
-                    }))
-                  }
-                  placeholder={
-                    mode === 'text'
-                      ? 'Type your answer here…'
-                      : 'Speak your answer or type here…'
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Navigation */}
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  onClick={() => goToQuestion(currentIdx - 1)}
-                  disabled={currentIdx === 0}
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30 transition"
-                >
-                  ← Previous
-                </button>
-
-                <div className="flex gap-1.5">
-                  {interview.questions.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => goToQuestion(i)}
-                      className={`h-2.5 w-2.5 rounded-full transition ${
-                        i === currentIdx
-                          ? 'bg-blue-500 scale-125'
-                          : answers[interview.questions[i].id]
-                            ? 'bg-emerald-400'
-                            : 'bg-gray-300'
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                {currentIdx < interview.questions.length - 1 ? (
-                  <button
-                    onClick={() => goToQuestion(currentIdx + 1)}
-                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
-                  >
-                    Next →
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
-                  >
-                    {isSubmitting ? '⏳ Evaluating…' : '✅ Submit Interview'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT PANEL — Webcam Studio */}
-          <div className="space-y-4">
-            <div className="rounded-xl border border-gray-200 bg-gray-900 p-3 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-300">
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                  LIVE INTERVIEW
-                </span>
-                <span className="text-xs text-gray-500">
-                  {interview.target_role}
-                </span>
-              </div>
-              {/* Video feed */}
-              <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-gray-800">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className={`h-full w-full object-cover ${
-                    cameraOn ? '' : 'hidden'
-                  }`}
-                  style={{ transform: 'scaleX(-1)' }}
-                />
-                {!cameraOn && (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <div className="text-center">
-                      <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-gray-700 text-3xl">
-                        👤
-                      </div>
-                      <p className="text-xs text-gray-400">Camera Off</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Media controls */}
-              <div className="mt-3 flex items-center justify-center gap-3">
-                <button
-                  onClick={toggleCamera}
-                  className={`rounded-full p-2.5 text-sm transition ${
-                    cameraOn
-                      ? 'bg-gray-700 text-white hover:bg-gray-600'
-                      : 'bg-red-600 text-white hover:bg-red-500'
-                  }`}
-                  title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
-                >
-                  {cameraOn ? '🎥' : '📷'}
-                </button>
-                <button
-                  onClick={toggleMic}
-                  className={`rounded-full p-2.5 text-sm transition ${
-                    micOn
-                      ? 'bg-gray-700 text-white hover:bg-gray-600'
-                      : 'bg-red-600 text-white hover:bg-red-500'
-                  }`}
-                  title={micOn ? 'Mute microphone' : 'Unmute microphone'}
-                >
-                  {micOn ? '🎙️' : '🔇'}
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="rounded-full bg-red-600 p-2.5 text-sm text-white hover:bg-red-500 disabled:opacity-50 transition"
-                  title="End Interview"
-                >
-                  📞
-                </button>
-              </div>
-            </div>
-
-            {/* AI Interviewer panel */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
-                    isSpeaking
-                      ? 'bg-blue-100 animate-pulse'
-                      : 'bg-gray-100'
-                  }`}
-                >
-                  🤖
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">
-                    AI Interviewer
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {isSpeaking
-                      ? '🔊 Speaking…'
-                      : isListening
-                        ? '👂 Listening…'
-                        : 'Waiting for response'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Question list sidebar */}
-              <div className="space-y-1.5">
-                {interview.questions.map((q, i) => (
-                  <button
-                    key={q.id}
-                    onClick={() => goToQuestion(i)}
-                    className={`w-full rounded-lg px-3 py-2 text-left text-xs transition ${
-                      i === currentIdx
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : answers[q.id]
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span className="font-medium">Q{i + 1}.</span>{' '}
-                    {q.question.slice(0, 50)}
-                    {q.question.length > 50 ? '…' : ''}
-                    {answers[q.id] && ' ✓'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════ FEEDBACK / RESULTS ═══════════════ */}
-      {isCompleted && interview.feedback && (
-        <div className="space-y-6">
-          {/* Overall score */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-8">
-              <div
-                className={`flex h-28 w-28 flex-shrink-0 items-center justify-center rounded-full border-4 ${scoreRingColor(interview.feedback.overall_score)}`}
-              >
-                <div className="text-center">
-                  <p
-                    className={`text-3xl font-bold ${scoreColor(interview.feedback.overall_score)}`}
-                  >
-                    {interview.feedback.overall_score}
-                  </p>
-                  <p className="text-xs text-gray-500">/ 100</p>
-                </div>
-              </div>
-              <div className="flex-1 text-center sm:text-left">
-                <h2 className="text-xl font-bold text-gray-900">
-                  Interview Performance
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {interview.target_role} • {interview.questions.length} questions
-                </p>
-                <p className="mt-3 text-sm text-gray-700 leading-relaxed">
-                  {interview.feedback.summary}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Per-question evaluations */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-gray-800">
-              📝 Question-by-Question Breakdown
-            </h3>
-            {interview.feedback.evaluations.map((ev) => {
-              const question = interview.questions.find(
-                (q) => q.id === ev.question_id
-              )
-              const answer = interview.answers?.find(
-                (a) => a.question_id === ev.question_id
-              )
-              const isExpanded = expandedEval === ev.question_id
-
-              return (
-                <div
-                  key={ev.question_id}
-                  className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-                >
-                  <button
-                    onClick={() =>
-                      setExpandedEval(isExpanded ? null : ev.question_id)
-                    }
-                    className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 transition"
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div
-                        className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border-2 ${scoreRingColor(ev.score)}`}
-                      >
-                        <span
-                          className={`text-sm font-bold ${scoreColor(ev.score)}`}
-                        >
-                          {ev.score}
-                        </span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-900">
-                          {question?.question || ev.question_id}
-                        </p>
-                        <span
-                          className={`inline-block mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${categoryBadge(question?.category || '')}`}
-                        >
-                          {question?.category || ''}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="ml-2 text-gray-400">
-                      {isExpanded ? '▲' : '▼'}
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t border-gray-100 p-4 space-y-4">
-                      {/* User's answer */}
-                      {answer && (
-                        <div>
-                          <p className="mb-1 text-xs font-semibold text-gray-500 uppercase">
-                            Your Answer
-                          </p>
-                          <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
-                            {answer.answer || '(No answer provided)'}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Strengths */}
-                      {ev.strengths.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 text-xs font-semibold text-emerald-600 uppercase">
-                            ✅ Strengths
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {ev.strengths.map((s, i) => (
-                              <span
-                                key={i}
-                                className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700"
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Improvements */}
-                      {ev.improvements.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 text-xs font-semibold text-amber-600 uppercase">
-                            ⚡ Areas to Improve
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {ev.improvements.map((im, i) => (
-                              <span
-                                key={i}
-                                className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700"
-                              >
-                                {im}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Ideal answer */}
-                      {ev.ideal_answer && (
-                        <div>
-                          <p className="mb-1 text-xs font-semibold text-blue-600 uppercase">
-                            💡 Ideal Answer Benchmark
-                          </p>
-                          <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
-                            {ev.ideal_answer}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Recommended actions */}
-          {interview.feedback.recommended_actions.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-gray-800">
-                🎯 Recommended Next Steps
-              </h3>
-              <ul className="space-y-2">
-                {interview.feedback.recommended_actions.map((action, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-sm text-gray-700"
-                  >
-                    <span className="mt-0.5 text-blue-500">→</span>
-                    {action}
-                  </li>
-                ))}
-              </ul>
+          {error && (
+            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800">
+              {error}
             </div>
           )}
 
-          {/* Retake */}
-          <div className="flex justify-center">
+          <div className="flex justify-end pt-2 border-t border-slate-100">
             <button
-              onClick={handleRetake}
-              className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition"
+              type="button"
+              onClick={handleStartInterview}
+              disabled={isLoading || !targetRole.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              🔄 Retake Interview / Practice Another Role
+              {isLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Preparing AI Questions…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  <span>Start Interview Simulation</span>
+                </>
+              )}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Active Studio / Evaluation Screen ─────────────────────────────── */}
+      {interview && (
+        <div className="space-y-8 animate-fade-in">
+          {/* Top Session Progress Bar */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Session: {interview.target_role}
+              </span>
+              <div className="flex items-center gap-3 mt-1">
+                <h2 className="text-lg font-bold text-slate-900">
+                  {isEvaluated ? 'Evaluation Scorecard' : `Question ${currentIdx + 1} of ${questions.length}`}
+                </h2>
+                <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[10px] font-bold text-brand-700 border border-brand-200">
+                  {interview.experience_level}
+                </span>
+              </div>
+            </div>
+
+            {!isEvaluated && (
+              <div className="flex items-center gap-2">
+                {questions.map((q, idx) => (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setCurrentIdx(idx)}
+                    className={`h-8 w-8 rounded-xl font-bold text-xs transition ${
+                      currentIdx === idx
+                        ? 'bg-brand-600 text-white shadow-xs'
+                        : answers[q.id]?.trim()
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Active Question & Stage View ──────────────────────────────── */}
+          {!isEvaluated && currentQ && (
+            <div className="grid gap-8 lg:grid-cols-12 items-start">
+              {/* Left Media Stage */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-slate-950 aspect-video flex items-center justify-center shadow-card">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`h-full w-full object-cover ${cameraOn ? 'block' : 'hidden'}`}
+                  />
+
+                  {!cameraOn && (
+                    <div className="flex flex-col items-center justify-center text-slate-400 space-y-2 p-6 text-center">
+                      <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center">
+                        <VideoOff className="h-6 w-6 text-slate-400" />
+                      </div>
+                      <p className="text-xs font-semibold text-white">Camera is currently off</p>
+                      <p className="text-[10px] text-slate-400">
+                        Enable camera for an authentic video interview experience.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Live Recording Badge */}
+                  {cameraOn && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-rose-600/90 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                      <span>LIVE</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Media Control Toolbar */}
+                <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={toggleCamera}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                      cameraOn
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                    <span>{cameraOn ? 'Stop Camera' : 'Start Camera'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleMic}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                      micOn
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                    <span>{micOn ? 'Mute Mic' : 'Unmute Mic'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Active Question & Answer Box */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-5">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        categoryBadge(currentQ.category).bg
+                      } ${categoryBadge(currentQ.category).color}`}
+                    >
+                      {currentQ.category}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => speakQuestion(currentQ.question)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                        isSpeaking
+                          ? 'bg-brand-100 text-brand-800'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {isSpeaking ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      <span>{isSpeaking ? 'Stop Audio' : 'Listen'}</span>
+                    </button>
+                  </div>
+
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                    {currentQ.question}
+                  </h3>
+
+                  {/* Collapsible Hints */}
+                  {currentQ.hint && (
+                    <div className="rounded-2xl border border-brand-100 bg-brand-50/40 p-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedHint(expandedHint === currentQ.id ? null : currentQ.id)
+                        }
+                        className="flex items-center justify-between w-full text-left text-xs font-bold text-brand-900"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <HelpCircle className="h-4 w-4 text-brand-600" />
+                          <span>AI Answer Guidance & Hint</span>
+                        </span>
+                        {expandedHint === currentQ.id ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+
+                      {expandedHint === currentQ.id && (
+                        <p className="mt-3 pt-2 border-t border-brand-100 text-xs text-brand-950 leading-relaxed">
+                          {currentQ.hint}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Answer Textarea */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span>Your Response:</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleSpeechRecognition(currentQ.id)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                          isListening
+                            ? 'bg-rose-100 text-rose-700 animate-pulse'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Mic className="h-3.5 w-3.5" />
+                        <span>{isListening ? 'Listening… (Click to stop)' : 'Dictate with Voice'}</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      rows={6}
+                      value={answers[currentQ.id] || ''}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({ ...prev, [currentQ.id]: e.target.value }))
+                      }
+                      placeholder="Type or dictate your response to the question..."
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none leading-relaxed"
+                    />
+
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>
+                        Words: {(answers[currentQ.id] || '').trim().split(/\s+/).filter(Boolean).length}
+                      </span>
+                      <span>Qwen will evaluate structure, relevance, and depth</span>
+                    </div>
+                  </div>
+
+                  {/* Navigation / Next Question Action */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={currentIdx === 0}
+                      onClick={() => setCurrentIdx((prev) => Math.max(0, prev - 1))}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+
+                    {currentIdx < questions.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setCurrentIdx((prev) => Math.min(questions.length - 1, prev + 1))}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
+                      >
+                        <span>Next Question</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSubmitInterview}
+                        disabled={isSubmitting}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                            <span>Evaluating Responses…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />
+                            <span>Submit for AI Evaluation</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Evaluated Scorecard View ───────────────────────────────────── */}
+          {isEvaluated && interview.feedback && (
+            <div className="space-y-8 animate-fade-in">
+              {/* Scorecard Hero */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Final Interview Assessment
+                  </span>
+                  <h2 className="text-2xl font-bold text-slate-900 mt-1">{interview.target_role}</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Evaluated across clarity, relevance, and technical precision using Qwen-Max.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border-4 font-black text-2xl shadow-sm ${scoreBg(
+                      interview.feedback.overall_score
+                    )}`}
+                  >
+                    <span className={scoreColor(interview.feedback.overall_score)}>
+                      {interview.feedback.overall_score}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Readiness Status
+                    </span>
+                    <p className="text-base font-bold text-slate-900">
+                      {interview.feedback.overall_score >= 75
+                        ? 'Interview Ready'
+                        : interview.feedback.overall_score >= 50
+                        ? 'Solid Foundation'
+                        : 'Needs Practice'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feedback Summary Callout */}
+              {interview.feedback.summary && (
+                <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Overall Interview Feedback</h3>
+                  <p className="text-xs leading-relaxed text-slate-700">
+                    {interview.feedback.summary}
+                  </p>
+                </div>
+              )}
+
+              {/* Recommended Actions */}
+              {interview.feedback.recommended_actions && interview.feedback.recommended_actions.length > 0 && (
+                <div className="rounded-3xl border border-brand-200/80 bg-brand-50/20 p-6 shadow-card">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-brand-900 mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-brand-600" />
+                    <span>Recommended Next Actions</span>
+                  </h3>
+                  <ul className="space-y-2">
+                    {interview.feedback.recommended_actions.map((act, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
+                        <span>{act}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Question-by-Question Detailed Evaluations */}
+              <div className="space-y-4">
+                <h3 className="text-base font-bold text-slate-900">Question-by-Question Analysis</h3>
+
+                {interview.feedback.evaluations.map((qEval, idx) => {
+                  const matchingQ = interview.questions.find((q) => q.id === qEval.question_id)
+
+                  return (
+                    <div
+                      key={qEval.question_id}
+                      className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 font-bold text-xs text-slate-800">
+                            {idx + 1}
+                          </span>
+                          <h4 className="text-sm font-bold text-slate-900">
+                            {matchingQ?.question || `Question ${idx + 1}`}
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className={`text-sm font-extrabold ${scoreColor(qEval.score)}`}>
+                            {qEval.score}/100
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Strengths & Improvements */}
+                      <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                        {qEval.strengths.length > 0 && (
+                          <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl space-y-1">
+                            <span className="font-bold text-emerald-900 text-[11px] uppercase">Strengths</span>
+                            <ul className="space-y-1 text-slate-700">
+                              {qEval.strengths.map((s, i) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                                  <span>{s}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {qEval.improvements.length > 0 && (
+                          <div className="bg-rose-50/50 border border-rose-100 p-3 rounded-2xl space-y-1">
+                            <span className="font-bold text-rose-900 text-[11px] uppercase">Improvements</span>
+                            <ul className="space-y-1 text-slate-700">
+                              {qEval.improvements.map((imp, i) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 mt-1 shrink-0" />
+                                  <span>{imp}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {qEval.ideal_answer && (
+                        <div className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="font-bold text-slate-800">Ideal Answer Outline: </span>
+                          <p className="text-slate-600 leading-relaxed">{qEval.ideal_answer}</p>
+                        </div>
+                      )}
+
+                      {matchingQ && answers[matchingQ.id] && (
+                        <div className="text-[11px] text-slate-500 pt-1">
+                          <span className="font-semibold text-slate-700">Your Answer: </span>
+                          <span>{answers[matchingQ.id]}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -2,9 +2,51 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
-body {
-  margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  html {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+  }
+}
+
+@layer utilities {
+  .glass-header {
+    @apply bg-white/80 backdrop-blur-md border-b border-slate-200/80;
+  }
+
+  .premium-card {
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-card hover:shadow-card-hover transition-all duration-200;
+  }
+
+  .premium-card-static {
+    @apply bg-white rounded-2xl border border-slate-200/80 shadow-card;
+  }
+
+  .gradient-brand {
+    @apply bg-gradient-to-r from-violet-600 via-brand-600 to-indigo-600;
+  }
+
+  .gradient-subtle {
+    @apply bg-gradient-to-br from-white via-slate-50 to-brand-50/20;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
 }

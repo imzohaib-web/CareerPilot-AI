@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Sparkles,
+  Send,
+  User,
+  Bot,
+  Compass,
+  ArrowRight,
+  ShieldCheck,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react'
 
 import { MessageContent } from '../components/chat/MessageContent'
 import { describeApiError } from '../services/apiClient'
@@ -8,14 +19,13 @@ import * as chatService from '../services/chat'
 import * as progressService from '../services/progress'
 import type { ChatMessage } from '../types'
 
-// Keep in sync with the backend limit (backend/app/schemas/chat.py).
 const MAX_MESSAGE_CHARS = 4000
 
 const STARTER_PROMPTS = [
-  'How can I improve my career profile?',
-  'What should I focus on to become job-ready?',
-  'How can I improve my resume?',
-  'What skills should I prioritize next?',
+  'How can I become job-ready as an AI Engineer?',
+  'Review my current skill gaps and suggest priorities.',
+  'What key technical projects should I build next?',
+  'Help me prepare for an upcoming technical interview.',
 ]
 
 interface MentorContextInfo {
@@ -29,8 +39,6 @@ function formatTime(iso: string): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// ── Main page ────────────────────────────────────────────────────────────
-
 export function CareerMentorPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -41,7 +49,7 @@ export function CareerMentorPage() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [contextInfo, setContextInfo] = useState<MentorContextInfo | null>(null)
 
-  // Restore the stored conversation on mount.
+  // Restore stored conversation on mount
   const loadHistory = useCallback(async () => {
     setIsLoadingHistory(true)
     setHistoryError(null)
@@ -60,8 +68,7 @@ export function CareerMentorPage() {
     loadHistory()
   }, [loadHistory])
 
-  // Check whether the backend has profile/resume data to ground answers.
-  // The banner is supplementary — the chat itself works either way.
+  // Check profile/resume context
   useEffect(() => {
     let cancelled = false
     async function loadContext() {
@@ -74,7 +81,7 @@ export function CareerMentorPage() {
           })
         }
       } catch {
-        // Leave the banner hidden when availability is unknown.
+        // Leave banner hidden if unavailable
       }
     }
     loadContext()
@@ -83,7 +90,7 @@ export function CareerMentorPage() {
     }
   }, [])
 
-  // Keep the newest message in view as the conversation grows.
+  // Auto-scroll on new message
   useEffect(() => {
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
   }, [messages, isSending])
@@ -105,7 +112,7 @@ export function CareerMentorPage() {
     try {
       const response = await chatService.sendMentorMessage(
         text,
-        conversationId ?? undefined,
+        conversationId ?? undefined
       )
       if (response.conversation_id) {
         setConversationId(response.conversation_id)
@@ -115,14 +122,12 @@ export function CareerMentorPage() {
       }
       setMessages((prev) => [...prev, response.message])
     } catch (err) {
-      // Roll back the optimistic message and restore the input — the failed
-      // turn was never persisted server-side, so the UI must stay in sync.
       setMessages((prev) => prev.filter((m) => m !== optimisticMessage))
       setInput(text)
       setSendError(
         err instanceof Error && err.message === 'EMPTY_REPLY'
           ? 'The mentor returned an empty response. Please try again.'
-          : describeApiError(err).message,
+          : describeApiError(err).message
       )
     } finally {
       setIsSending(false)
@@ -142,63 +147,73 @@ export function CareerMentorPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-3xl flex-col px-4 pt-8">
-      {/* Heading */}
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900">Career Mentor</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Ask career questions and get personalized, actionable guidance. Your conversation is
-          saved, so you can pick up where you left off.
-        </p>
+    <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-4xl flex-col px-4 sm:px-6 lg:px-8 pt-8 pb-4">
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200/80">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+            <span>Alibaba Cloud Qwen-Max Powered</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">AI Career Mentor</h1>
+          <p className="text-xs text-slate-500">
+            Ask career strategy questions, request portfolio feedback, and explore actionable learning steps.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 self-start sm:self-auto">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          <span className="font-semibold">Context Grounded</span>
+        </div>
       </header>
 
-      {/* Personalization / setup banner */}
+      {/* ── Context Grounding Banner ─────────────────────────────────────── */}
       {contextInfo && <ContextBanner info={contextInfo} />}
 
-      {/* Conversation */}
-      <div className="mt-6 flex-1 space-y-5 pb-4">
+      {/* ── Conversation Thread ─────────────────────────────────────────── */}
+      <div className="mt-6 flex-1 space-y-6 pb-6">
         {isLoadingHistory ? (
           <ConversationSkeleton />
         ) : messages.length === 0 ? (
-          <EmptyConversation
+          <EmptyConversationState
             prompts={STARTER_PROMPTS}
             disabled={isSending}
             onPromptClick={(prompt) => void sendMessage(prompt)}
           />
         ) : (
-          messages.map((message, index) => <MessageBubble key={index} message={message} />)
+          messages.map((message, index) => (
+            <MessageBubble key={index} message={message} />
+          ))
         )}
 
         {isSending && <ThinkingIndicator />}
       </div>
 
-      {/* Composer — sticky so it stays reachable while reading history */}
-      <div className="sticky bottom-0 z-10 bg-slate-50/95 pb-3 pt-2 backdrop-blur">
+      {/* ── Sticky Composer Box ──────────────────────────────────────────── */}
+      <div className="sticky bottom-0 z-20 bg-slate-50/95 pb-4 pt-2 backdrop-blur-md">
         {historyError && (
-          <div
-            role="alert"
-            className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-          >
-            <span>Couldn&apos;t load your previous conversation. {historyError}</span>
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+            <span>Could not restore your chat history. {historyError}</span>
             <button
               type="button"
               onClick={() => void loadHistory()}
-              className="shrink-0 rounded-lg bg-red-100 px-3 py-1.5 font-medium text-red-700 hover:bg-red-200"
+              className="font-bold underline text-rose-900"
             >
-              Try again
+              Retry
             </button>
           </div>
         )}
 
         {sendError && (
-          <div role="alert" className="mb-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {sendError}
+          <div className="mb-3 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-medium text-rose-800">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+            <span>{sendError}</span>
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-300 bg-white shadow-sm focus-within:border-violet-500"
+          className="rounded-3xl border border-slate-300/90 bg-white shadow-card focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all"
         >
           <label htmlFor="mentor-message" className="sr-only">
             Message your Career Mentor
@@ -211,22 +226,33 @@ export function CareerMentorPage() {
             disabled={isSending}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a career question…"
-            className="block w-full resize-none rounded-t-2xl border-0 px-4 pt-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            placeholder="Ask your mentor anything about your career path, resume, or skills..."
+            className="block w-full resize-none rounded-t-3xl border-0 px-5 pt-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
           />
-          <div className="flex items-center justify-between gap-3 rounded-b-2xl border-t border-slate-100 px-3 py-2">
-            <span className="hidden text-[11px] text-slate-400 sm:inline">
-              Enter to send · Shift+Enter for a new line
+          <div className="flex items-center justify-between gap-3 rounded-b-3xl border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
+            <span className="hidden sm:inline text-[11px] text-slate-400">
+              Press <kbd className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">Enter</kbd> to send · <kbd className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">Shift+Enter</kbd> for new line
             </span>
-            <span className="text-[11px] text-slate-400 sm:hidden" aria-live="polite">
+            <span className="sm:hidden text-[11px] text-slate-400">
               {input.length}/{MAX_MESSAGE_CHARS}
             </span>
+
             <button
               type="submit"
               disabled={isSending || input.trim().length === 0}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {isSending ? 'Sending…' : 'Send'}
+              {isSending ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Thinking…</span>
+                </>
+              ) : (
+                <>
+                  <span>Send</span>
+                  <Send className="h-3.5 w-3.5" />
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -235,45 +261,39 @@ export function CareerMentorPage() {
   )
 }
 
-// ── Personalization banner ──────────────────────────────────────────────
+// ── Context Banner ───────────────────────────────────────────────────────
 
 function ContextBanner({ info }: { info: MentorContextInfo }) {
   if (info.hasProfile && info.hasResume) {
     return (
-      <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
-        <SparkIcon className="mt-0.5 text-violet-500" />
-        <p className="text-sm text-violet-700">
-          Career Mentor uses your <span className="font-medium">career profile</span> and{' '}
-          <span className="font-medium">resume analysis</span> to personalize its guidance.
-        </p>
+      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-900">
+        <Sparkles className="h-4 w-4 text-brand-600 shrink-0" />
+        <span>
+          Grounded with your <strong className="font-semibold">Career Profile</strong> and <strong className="font-semibold">Resume Analysis</strong> for hyper-personalized advice.
+        </span>
       </div>
     )
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-      <p>
-        Add{' '}
-        {!info.hasProfile && 'your career profile'}
-        {!info.hasProfile && !info.hasResume && ' and '}
-        {!info.hasResume && 'a resume analysis'}
-        {" so the mentor can personalize its guidance."}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-medium">
+    <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+        <span>
+          Add {!info.hasProfile && 'your Career Profile'}
+          {!info.hasProfile && !info.hasResume && ' and '}
+          {!info.hasResume && 'a Resume Analysis'} for tailored recommendations.
+        </span>
+      </div>
+      <div className="flex items-center gap-3 font-semibold">
         {!info.hasProfile && (
-          <Link
-            to="/profile"
-            className="underline decoration-amber-400 underline-offset-2 hover:text-amber-900"
-          >
-            Create your profile
+          <Link to="/profile" className="underline hover:text-amber-950">
+            Profile →
           </Link>
         )}
         {!info.hasResume && (
-          <Link
-            to="/resume"
-            className="underline decoration-amber-400 underline-offset-2 hover:text-amber-900"
-          >
-            Analyze your resume
+          <Link to="/resume" className="underline hover:text-amber-950">
+            Resume →
           </Link>
         )}
       </div>
@@ -281,118 +301,115 @@ function ContextBanner({ info }: { info: MentorContextInfo }) {
   )
 }
 
-// ── Conversation pieces ──────────────────────────────────────────────────
-
-function SparkIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden="true"
-      className={`h-4 w-4 shrink-0 ${className}`}
-    >
-      <path d="M10 1.5l2.1 5.2 5.6.5-4.2 3.7 1.3 5.5L10 13.4l-4.8 3 1.3-5.5L2.3 7.2l5.6-.5L10 1.5z" />
-    </svg>
-  )
-}
+// ── Message Bubble ───────────────────────────────────────────────────────
 
 function MessageBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === 'user'
   const time = formatTime(message.created_at)
 
-  if (message.role === 'user') {
-    return (
-      <div className="flex flex-col items-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-violet-600 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm sm:max-w-[75%]">
-          {message.content}
-        </div>
-        {time && <span className="mt-1 pr-1 text-[11px] text-slate-400">{time}</span>}
-      </div>
-    )
-  }
-
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+      {!isUser && (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-700 to-indigo-600 text-white shadow-xs">
+          <Bot className="h-4 w-4" />
+        </div>
+      )}
+
       <div
-        aria-hidden="true"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600"
+        className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-4 sm:p-5 shadow-xs ${
+          isUser
+            ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-br-xs'
+            : 'bg-white border border-slate-200/80 text-slate-800 rounded-bl-xs'
+        }`}
       >
-        <SparkIcon />
+        {isUser ? (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+        ) : (
+          <div className="text-sm leading-relaxed prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5">
+            <MessageContent content={message.content} />
+          </div>
+        )}
+
+        {time && (
+          <p
+            className={`mt-2 text-[10px] ${
+              isUser ? 'text-brand-200 text-right' : 'text-slate-400'
+            }`}
+          >
+            {time}
+          </p>
+        )}
       </div>
-      <div className="min-w-0 max-w-[85%] sm:max-w-[75%]">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xs font-semibold text-slate-900">CareerPilot</span>
-          {time && <span className="text-[11px] text-slate-400">{time}</span>}
+
+      {isUser && (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-700 shadow-xs">
+          <User className="h-4 w-4" />
         </div>
-        <div className="mt-1 rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <MessageContent content={message.content} />
-        </div>
-      </div>
+      )}
     </div>
   )
 }
+
+// ── Thinking / Skeleton States ───────────────────────────────────────────
 
 function ThinkingIndicator() {
   return (
-    <div className="flex gap-3">
-      <div
-        aria-hidden="true"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600"
-      >
-        <SparkIcon />
+    <div className="flex gap-3 items-start animate-fade-in">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white shadow-xs">
+        <Bot className="h-4 w-4" />
       </div>
-      <div className="min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xs font-semibold text-slate-900">CareerPilot</span>
-        </div>
-        <div
-          role="status"
-          className="mt-1 flex items-center gap-2.5 rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 shadow-sm"
-        >
-          <span className="flex gap-1" aria-hidden="true">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" />
-          </span>
-          <span className="text-sm text-slate-500">Thinking…</span>
-        </div>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Generating personalized guidance — this can take a few seconds.
-        </p>
+      <div className="rounded-3xl rounded-bl-xs border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-2">
+        <span className="flex space-x-1">
+          <span className="h-2 w-2 rounded-full bg-brand-400 animate-bounce" />
+          <span className="h-2 w-2 rounded-full bg-brand-500 animate-bounce [animation-delay:0.2s]" />
+          <span className="h-2 w-2 rounded-full bg-brand-600 animate-bounce [animation-delay:0.4s]" />
+        </span>
+        <span className="text-xs text-slate-500 font-medium">Qwen is thinking…</span>
       </div>
     </div>
   )
 }
 
-function EmptyConversation({
+function EmptyConversationState({
   prompts,
   disabled,
   onPromptClick,
 }: {
   prompts: string[]
   disabled: boolean
-  onPromptClick: (prompt: string) => void
+  onPromptClick: (p: string) => void
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Start a conversation
-      </h2>
-      <p className="mt-2 text-sm text-slate-600">
-        Ask anything about your career — goals, skills, resumes, interviews — or start with one of
-        these:
-      </p>
-      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
-        {prompts.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            disabled={disabled}
-            onClick={() => onPromptClick(prompt)}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {prompt}
-          </button>
-        ))}
+    <div className="flex flex-col items-center justify-center py-10 text-center space-y-6">
+      <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white shadow-md shadow-brand-500/20">
+        <Compass className="h-8 w-8" />
+      </div>
+
+      <div className="space-y-1 max-w-md">
+        <h3 className="text-lg font-bold text-slate-900">Your AI Career Mentor is Ready</h3>
+        <p className="text-xs text-slate-500">
+          Get real-time insights tailored to your target roles, resume improvements, and career goals.
+        </p>
+      </div>
+
+      <div className="w-full max-w-lg space-y-2 pt-2">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+          Suggested Topics
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {prompts.map((prompt, idx) => (
+            <button
+              key={idx}
+              type="button"
+              disabled={disabled}
+              onClick={() => onPromptClick(prompt)}
+              className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left text-xs font-semibold text-slate-700 shadow-xs hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-900 transition group disabled:opacity-50"
+            >
+              <span>{prompt}</span>
+              <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-600 shrink-0 ml-2" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -400,17 +417,10 @@ function EmptyConversation({
 
 function ConversationSkeleton() {
   return (
-    <div className="space-y-5" aria-hidden="true">
-      <div className="flex justify-end">
-        <div className="h-10 w-40 animate-pulse rounded-2xl bg-slate-200" />
-      </div>
-      <div className="flex gap-3">
-        <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-slate-200" />
-        <div className="w-3/4 space-y-2">
-          <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
-          <div className="h-24 animate-pulse rounded-2xl bg-slate-200" />
-        </div>
-      </div>
+    <div className="space-y-4 animate-pulse">
+      <div className="h-16 w-2/3 rounded-3xl bg-slate-200/70" />
+      <div className="h-20 w-3/4 rounded-3xl bg-slate-200/70 ml-auto" />
+      <div className="h-28 w-4/5 rounded-3xl bg-slate-200/70" />
     </div>
   )
 }

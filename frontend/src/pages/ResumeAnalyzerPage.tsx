@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  FileText,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  ArrowRight,
+  RefreshCw,
+  Award,
+  Briefcase,
+  GraduationCap,
+  FolderGit2,
+  ShieldCheck,
+  AlertTriangle,
+  Lightbulb,
+} from 'lucide-react'
 
 import { describeApiError } from '../services/apiClient'
 import * as resumeService from '../services/resume'
@@ -8,21 +24,21 @@ import type { ResumeAnalysis, ResumeAnalysisResponse } from '../types'
 const MAX_FILE_SIZE_MB = 5
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
-// ── Score colour helper ────────────────────────────────────────────────────
+// ── Score Helpers ────────────────────────────────────────────────────────
 
-function scoreColor(score: number): string {
-  if (score >= 75) return 'text-emerald-600'
-  if (score >= 50) return 'text-amber-600'
-  return 'text-red-600'
+function scoreBg(score: number): string {
+  if (score >= 75) return 'bg-emerald-50 border-emerald-200 text-emerald-800'
+  if (score >= 50) return 'bg-amber-50 border-amber-200 text-amber-800'
+  return 'bg-rose-50 border-rose-200 text-rose-800'
 }
 
-function scoreRingColor(score: number): string {
+function scoreRing(score: number): string {
   if (score >= 75) return 'border-emerald-500'
   if (score >= 50) return 'border-amber-500'
-  return 'border-red-500'
+  return 'border-rose-500'
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────
+// ── Main Page Component ──────────────────────────────────────────────────
 
 export function ResumeAnalyzerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -30,6 +46,7 @@ export function ResumeAnalyzerPage() {
   // Upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -52,34 +69,55 @@ export function ResumeAnalyzerPage() {
     loadLatest()
   }, [loadLatest])
 
-  // ── File selection ─────────────────────────────────────────────────────
+  // ── File validation & selection ────────────────────────────────────────
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null
+  function validateAndSetFile(file: File) {
     setFileError(null)
     setSelectedFile(null)
 
-    if (!file) return
-
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setFileError('Only PDF files are accepted.')
+      setFileError('Only PDF files are accepted. Please select a valid .pdf file.')
       return
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setFileError(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum is ${MAX_FILE_SIZE_MB} MB.`)
+      setFileError(
+        `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`
+      )
       return
     }
 
     if (file.size === 0) {
-      setFileError('The selected file is empty.')
+      setFileError('The selected PDF file is empty.')
       return
     }
 
     setSelectedFile(file)
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) validateAndSetFile(file)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) validateAndSetFile(file)
+  }
+
+  // ── Submit for Analysis ────────────────────────────────────────────────
 
   async function handleAnalyze() {
     if (!selectedFile || isAnalyzing) return
@@ -90,7 +128,6 @@ export function ResumeAnalyzerPage() {
       const data = await resumeService.analyzeResume(selectedFile)
       setResult(data)
       setSelectedFile(null)
-      // Clear the native file input so re-selecting the same file triggers change.
       if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (err) {
       setAnalysisError(describeApiError(err).message)
@@ -99,96 +136,166 @@ export function ResumeAnalyzerPage() {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
-
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10">
-      <h1 className="text-2xl font-semibold text-slate-900">Resume Analyzer</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Upload your resume as a PDF and let Qwen AI evaluate its strengths, weaknesses, and job-readiness.
-      </p>
+    <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
+            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+            <span>Alibaba Cloud Qwen AI Parser</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+            Resume Analyzer & ATS Optimizer
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
+            Upload your resume to extract validated skills, audit ATS readability, and discover high-priority enhancements.
+          </p>
+        </div>
 
-      {/* Upload card */}
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label className="block text-sm font-medium text-slate-700">Select PDF resume</label>
-        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+        {result && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 self-start sm:self-auto rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+          >
+            <UploadCloud className="h-4 w-4 text-slate-500" />
+            <span>Analyze New Resume</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Upload Card / Dropzone ───────────────────────────────────────── */}
+      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6">
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+            isDragging
+              ? 'border-brand-500 bg-brand-50/50 scale-[0.99]'
+              : selectedFile
+              ? 'border-emerald-400 bg-emerald-50/20'
+              : 'border-slate-200 hover:border-brand-400 hover:bg-slate-50/60'
+          }`}
+        >
           <input
             ref={fileInputRef}
             type="file"
             accept=".pdf,application/pdf"
             onChange={handleFileChange}
             disabled={isAnalyzing}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50"
+            className="hidden"
           />
+
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 mb-3 shadow-xs">
+            {selectedFile ? (
+              <FileText className="h-7 w-7 text-emerald-600" />
+            ) : (
+              <UploadCloud className="h-7 w-7 text-brand-600 animate-pulse-subtle" />
+            )}
+          </div>
+
+          {selectedFile ? (
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-slate-900">{selectedFile.name}</p>
+              <p className="text-xs text-slate-500">
+                {(selectedFile.size / 1024).toFixed(0)} KB · Ready to analyze
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-slate-900">
+                Click to browse or drag and drop your PDF resume
+              </p>
+              <p className="text-xs text-slate-500">
+                Supports PDF with selectable text up to {MAX_FILE_SIZE_MB} MB
+              </p>
+            </div>
+          )}
         </div>
 
-        <p className="mt-1 text-xs text-slate-400">
-          Accepted: PDF only · Max {MAX_FILE_SIZE_MB} MB · Must contain selectable text
-        </p>
-
-        {selectedFile && (
-          <p className="mt-2 text-sm text-slate-700">
-            Selected: <span className="font-medium">{selectedFile.name}</span>{' '}
-            <span className="text-slate-400">
-              ({(selectedFile.size / 1024).toFixed(0)} KB)
-            </span>
-          </p>
-        )}
-
         {fileError && (
-          <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{fileError}</p>
+          <div className="flex items-center gap-2 rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs font-medium text-rose-800">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{fileError}</span>
+          </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleAnalyze}
-          disabled={!selectedFile || isAnalyzing}
-          className="mt-4 w-full rounded-lg bg-violet-600 px-4 py-2.5 font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isAnalyzing ? 'Analyzing with AI…' : 'Analyze Resume'}
-        </button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+            <span>Evaluated securely using Alibaba Cloud Qwen-Max</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={!selectedFile || isAnalyzing}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isAnalyzing ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Qwen is analyzing your resume…</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                <span>Analyze Resume</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {isAnalyzing && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-violet-600">
-            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
-            Qwen is analyzing your resume — this may take 15–30 seconds…
+          <div className="rounded-2xl bg-brand-50/60 border border-brand-200 p-4 text-xs text-brand-800 flex items-center gap-3 animate-pulse">
+            <Sparkles className="h-4 w-4 text-brand-600 shrink-0" />
+            <span>
+              Extracting structural sections, technical competencies, and ATS score metrics. This takes ~15 seconds...
+            </span>
           </div>
         )}
 
         {analysisError && (
-          <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs font-medium text-rose-800">
             {analysisError}
           </div>
         )}
       </div>
 
-      {/* Warning when previous analysis could not be loaded */}
+      {/* ── Error loading previous analysis ──────────────────────────────── */}
       {loadError && !result && (
-        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-          Could not load your previous analysis: {loadError}
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800 flex items-center justify-between">
+          <span>Could not restore your previous resume analysis: {loadError}</span>
+          <button type="button" onClick={loadLatest} className="font-semibold underline">
+            Retry
+          </button>
         </div>
       )}
 
-      {/* Results */}
-      {result && <AnalysisResults result={result} />}
+      {/* ── Active Analysis Results ──────────────────────────────────────── */}
+      {result && <AnalysisResultsView result={result} />}
 
-      {/* Next step: analyze skill gaps */}
+      {/* ── Seamless Next Step Bridge ────────────────────────────────────── */}
       {result && (
-        <div className="mt-8 flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
-          <div>
-            <p className="text-sm font-medium text-violet-800">Resume analyzed — what's next?</p>
-            <p className="mt-0.5 text-xs text-violet-600">
-              Compare your skills against a target role to identify skill gaps.
+        <div className="rounded-3xl bg-gradient-to-r from-brand-900 to-indigo-950 p-6 sm:p-7 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-brand-300">
+              Next Step in Journey
+            </span>
+            <h3 className="text-lg font-bold text-white">Compare Skills Against a Target Job</h3>
+            <p className="text-xs text-slate-300">
+              Use your detected skills to run an automated Skill Gap Analysis for any job description.
             </p>
           </div>
           <Link
             to="/skill-gap"
-            className="shrink-0 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs font-bold text-slate-900 shadow-md hover:bg-brand-50 transition shrink-0"
           >
-            Analyze Skill Gaps
+            <span>Analyze Skill Gaps</span>
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       )}
@@ -196,142 +303,171 @@ export function ResumeAnalyzerPage() {
   )
 }
 
-// ── Results component ─────────────────────────────────────────────────────
+// ── Results Presentation Component ───────────────────────────────────────
 
-function AnalysisResults({ result }: { result: ResumeAnalysisResponse }) {
+function AnalysisResultsView({ result }: { result: ResumeAnalysisResponse }) {
   const { analysis } = result
   const analyzedDate = new Date(result.analyzed_at).toLocaleString()
 
   return (
-    <div className="mt-10 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Analysis Results</h2>
-          <p className="text-sm text-slate-500">
-            {result.filename} · Analyzed {analyzedDate} · Model: {result.model}
+    <div className="space-y-8 animate-fade-in">
+      {/* Overview Score Card */}
+      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900">Resume Evaluation Results</h2>
+            <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[10px] font-bold text-brand-700 border border-brand-200">
+              {result.model}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            Document: <span className="font-semibold text-slate-700">{result.filename}</span> · Analyzed on {analyzedDate}
           </p>
         </div>
-        {/* Score badge */}
-        <div
-          className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 ${scoreRingColor(analysis.score)}`}
-        >
-          <span className={`text-2xl font-bold ${scoreColor(analysis.score)}`}>
+
+        {/* ATS Score Radial */}
+        <div className="flex items-center gap-4">
+          <div
+            className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border-4 shadow-sm font-black text-2xl ${scoreRing(
+              analysis.score
+            )} ${scoreBg(analysis.score)}`}
+          >
             {analysis.score}
-          </span>
+          </div>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              ATS Readiness Tier
+            </span>
+            <p className="text-base font-bold text-slate-900">
+              {analysis.score >= 75
+                ? 'Strong & Highly Competitive'
+                : analysis.score >= 50
+                ? 'Good Foundation'
+                : 'Action Required'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {analysis.score >= 75
+                ? 'Ready for automated screening'
+                : 'Follow suggestions below to improve match'}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Summary */}
+      {/* Executive Summary */}
       {analysis.summary && (
-        <Section title="Summary">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
+          <div className="flex items-center gap-2 mb-3">
+            <Lightbulb className="h-4 w-4 text-brand-600" />
+            <h3 className="text-sm font-bold text-slate-900">Executive Summary</h3>
+          </div>
           <p className="text-sm leading-relaxed text-slate-700">{analysis.summary}</p>
-        </Section>
+        </div>
       )}
 
-      {/* Two-column: strengths + weaknesses */}
-      <div className="grid gap-6 sm:grid-cols-2">
+      {/* 2-Column: Strengths & Weaknesses */}
+      <div className="grid gap-6 md:grid-cols-2">
         {analysis.strengths.length > 0 && (
-          <Section title="Strengths" accent="emerald">
-            <BulletList items={analysis.strengths} color="emerald" />
-          </Section>
+          <div className="rounded-3xl border border-emerald-200/80 bg-emerald-50/20 p-6 sm:p-7 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <h3 className="text-sm font-bold text-emerald-900">Key Strengths Detected</h3>
+            </div>
+            <ul className="space-y-2.5">
+              {analysis.strengths.map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+
         {analysis.weaknesses.length > 0 && (
-          <Section title="Weaknesses" accent="red">
-            <BulletList items={analysis.weaknesses} color="red" />
-          </Section>
+          <div className="rounded-3xl border border-rose-200/80 bg-rose-50/20 p-6 sm:p-7 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="h-5 w-5 text-rose-600" />
+              <h3 className="text-sm font-bold text-rose-900">Critical Weaknesses & ATS Blockers</h3>
+            </div>
+            <ul className="space-y-2.5">
+              {analysis.weaknesses.map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
-      {/* Missing info + improvements */}
-      <div className="grid gap-6 sm:grid-cols-2">
+      {/* Missing Info & Actionable Improvements */}
+      <div className="grid gap-6 md:grid-cols-2">
         {analysis.missing_info.length > 0 && (
-          <Section title="Missing Information" accent="amber">
-            <BulletList items={analysis.missing_info} color="amber" />
-          </Section>
+          <div className="rounded-3xl border border-amber-200/80 bg-amber-50/20 p-6 sm:p-7 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <h3 className="text-sm font-bold text-amber-900">Missing Information</h3>
+            </div>
+            <ul className="space-y-2.5">
+              {analysis.missing_info.map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+
         {analysis.improvements.length > 0 && (
-          <Section title="Improvement Suggestions" accent="violet">
-            <BulletList items={analysis.improvements} color="violet" />
-          </Section>
+          <div className="rounded-3xl border border-brand-200/80 bg-brand-50/20 p-6 sm:p-7 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="h-5 w-5 text-brand-600" />
+              <h3 className="text-sm font-bold text-brand-900">Suggested Action Items</h3>
+            </div>
+            <ul className="space-y-2.5">
+              {analysis.improvements.map((item, i) => (
+                <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
-      {/* Skills detected */}
+      {/* Extracted Skills Cloud */}
       {analysis.skills_detected.length > 0 && (
-        <Section title="Skills Detected">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-900">Extracted Skills ({analysis.skills_detected.length})</h3>
+            <span className="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+              Automated Extraction
+            </span>
+          </div>
           <div className="flex flex-wrap gap-2">
             {analysis.skills_detected.map((skill) => (
               <span
                 key={skill}
-                className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-800"
               >
                 {skill}
               </span>
             ))}
           </div>
-        </Section>
+        </div>
       )}
 
-      {/* Extracted sections */}
-      <ResumeSectionsView sections={analysis.sections} />
+      {/* Extracted Structural Resume Sections */}
+      <ExtractedSectionsView sections={analysis.sections} />
     </div>
   )
 }
 
-// ── Reusable presentational pieces ────────────────────────────────────────
-
-function Section({
-  title,
-  accent,
-  children,
-}: {
-  title: string
-  accent?: string
-  children: React.ReactNode
-}) {
-  const borderClass =
-    accent === 'emerald'
-      ? 'border-l-emerald-400'
-      : accent === 'red'
-        ? 'border-l-red-400'
-        : accent === 'amber'
-          ? 'border-l-amber-400'
-          : accent === 'violet'
-            ? 'border-l-violet-400'
-            : 'border-l-slate-300'
-
-  return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm border-l-4 ${borderClass}`}>
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
-      {children}
-    </div>
-  )
-}
-
-function BulletList({ items, color }: { items: string[]; color: string }) {
-  const dotColor =
-    color === 'emerald'
-      ? 'bg-emerald-400'
-      : color === 'red'
-        ? 'bg-red-400'
-        : color === 'amber'
-          ? 'bg-amber-400'
-          : 'bg-violet-400'
-
-  return (
-    <ul className="space-y-2">
-      {items.map((item) => (
-        <li key={item} className="flex items-start gap-2 text-sm text-slate-700">
-          <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
-          {item}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function ResumeSectionsView({ sections }: { sections: ResumeAnalysis['sections'] }) {
+function ExtractedSectionsView({ sections }: { sections: ResumeAnalysis['sections'] }) {
   const hasEducation = sections.education.length > 0
   const hasExperience = sections.experience.length > 0
   const hasProjects = sections.projects.length > 0
@@ -340,80 +476,109 @@ function ResumeSectionsView({ sections }: { sections: ResumeAnalysis['sections']
   if (!hasEducation && !hasExperience && !hasProjects && !hasCertifications) return null
 
   return (
-    <>
-      {hasEducation && (
-        <Section title="Education">
-          <div className="space-y-3">
-            {sections.education.map((edu, i) => (
-              <div key={i} className="text-sm text-slate-700">
-                <p className="font-medium text-slate-900">
-                  {edu.degree}
-                  {edu.field_of_study ? ` in ${edu.field_of_study}` : ''}
-                </p>
-                <p className="text-slate-500">
-                  {edu.institution}
-                  {edu.year ? ` · ${edu.year}` : ''}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+    <div className="space-y-6">
+      <h3 className="text-base font-bold text-slate-900">Parsed Resume Structure</h3>
 
-      {hasExperience && (
-        <Section title="Experience">
-          <div className="space-y-3">
-            {sections.experience.map((exp, i) => (
-              <div key={i} className="text-sm text-slate-700">
-                <p className="font-medium text-slate-900">
-                  {exp.role}
-                  {exp.company ? ` at ${exp.company}` : ''}
-                </p>
-                {exp.duration && <p className="text-xs text-slate-400">{exp.duration}</p>}
-                {exp.description && <p className="mt-1 text-slate-600">{exp.description}</p>}
-              </div>
-            ))}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Education */}
+        {hasEducation && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <GraduationCap className="h-5 w-5 text-brand-600" />
+              <h4 className="text-sm font-bold text-slate-900">Education</h4>
+            </div>
+            <div className="space-y-4">
+              {sections.education.map((edu, idx) => (
+                <div key={idx} className="border-l-2 border-brand-200 pl-3 space-y-0.5">
+                  <p className="text-xs font-bold text-slate-900">
+                    {edu.degree} {edu.field_of_study ? `in ${edu.field_of_study}` : ''}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {edu.institution} {edu.year ? `· ${edu.year}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
-        </Section>
-      )}
+        )}
 
-      {hasProjects && (
-        <Section title="Projects">
-          <div className="space-y-3">
-            {sections.projects.map((proj, i) => (
-              <div key={i} className="text-sm text-slate-700">
-                <p className="font-medium text-slate-900">{proj.name}</p>
-                {proj.description && <p className="mt-0.5 text-slate-600">{proj.description}</p>}
-                {proj.technologies.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {proj.technologies.map((tech) => (
-                      <span
-                        key={tech}
-                        className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+        {/* Experience */}
+        {hasExperience && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Briefcase className="h-5 w-5 text-brand-600" />
+              <h4 className="text-sm font-bold text-slate-900">Work Experience</h4>
+            </div>
+            <div className="space-y-4">
+              {sections.experience.map((exp, idx) => (
+                <div key={idx} className="border-l-2 border-brand-200 pl-3 space-y-0.5">
+                  <p className="text-xs font-bold text-slate-900">{exp.role}</p>
+                  <p className="text-[11px] font-medium text-slate-600">
+                    {exp.company} {exp.duration ? `· ${exp.duration}` : ''}
+                  </p>
+                  {exp.description && (
+                    <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
+                      {exp.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </Section>
-      )}
+        )}
 
-      {hasCertifications && (
-        <Section title="Certifications">
-          <ul className="space-y-1">
-            {sections.certifications.map((cert) => (
-              <li key={cert} className="flex items-center gap-2 text-sm text-slate-700">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
-                {cert}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-    </>
+        {/* Projects */}
+        {hasProjects && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <FolderGit2 className="h-5 w-5 text-brand-600" />
+              <h4 className="text-sm font-bold text-slate-900">Projects</h4>
+            </div>
+            <div className="space-y-4">
+              {sections.projects.map((proj, idx) => (
+                <div key={idx} className="border-l-2 border-brand-200 pl-3 space-y-1">
+                  <p className="text-xs font-bold text-slate-900">{proj.name}</p>
+                  {proj.description && (
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      {proj.description}
+                    </p>
+                  )}
+                  {proj.technologies.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {proj.technologies.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Certifications */}
+        {hasCertifications && (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Award className="h-5 w-5 text-brand-600" />
+              <h4 className="text-sm font-bold text-slate-900">Certifications</h4>
+            </div>
+            <div className="space-y-2">
+              {sections.certifications.map((cert, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span>{cert}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
