@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Origins are public URLs (no secrets) — logging them makes CORS
+    # misconfiguration (the classic cause of preflight 400s) instantly
+    # diagnosable in Render logs.
+    logger.info(
+        "CORS allowed origins: %s",
+        ", ".join(config.CORS_ORIGINS) if config.CORS_ORIGINS else "(none configured)",
+    )
     await connect_db()
     yield
     await close_db()
@@ -27,7 +34,9 @@ app = FastAPI(title="CareerPilot AI API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
-    allow_credentials=True,
+    # Authentication uses JWT Bearer tokens in the Authorization header —
+    # no browser cookies — so credentialed CORS is unnecessary.
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )

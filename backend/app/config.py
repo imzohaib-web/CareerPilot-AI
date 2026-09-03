@@ -4,7 +4,42 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load backend/.env explicitly so the app works from any working directory.
+# Real environment variables (e.g. Render dashboard values) always win —
+# load_dotenv never overrides existing environment variables.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+
+def _parse_origins(raw: str) -> list[str]:
+    """Normalize a comma-separated CORS origin list.
+
+    Tolerates common configuration mistakes so an origin like
+    ``"https://app.vercel.app/"`` still matches the browser-sent
+    ``https://app.vercel.app``:
+
+    - surrounding brackets or quotes (copy/paste artifacts)
+    - spaces before/after commas
+    - trailing slashes
+    - mixed case (origins are scheme/host/port, always lowercased by browsers)
+    - empty entries
+
+    Wildcards are rejected: this API uses authenticated requests, which
+    require exact-origin matching.
+    """
+    cleaned = raw.strip().strip("[]")
+    origins: list[str] = []
+    for part in cleaned.split(","):
+        origin = (
+            part.strip()
+            .strip("\"'")
+            .rstrip("/")
+            .strip()
+            .lower()
+        )
+        if not origin or origin == "*":
+            continue
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 # --- Database ---
 MONGODB_URI = os.getenv("MONGODB_URI", "")
@@ -33,8 +68,15 @@ QWEN_TIMEOUT = float(os.getenv("QWEN_TIMEOUT", "60"))
 QWEN_ENABLE_THINKING = os.getenv("QWEN_ENABLE_THINKING", "false").lower() == "true"
 
 # --- CORS (comma-separated list of allowed frontend origins) ---
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175")
-CORS_ORIGINS = [origin.strip() for origin in FRONTEND_ORIGIN.split(",") if origin.strip()]
+# Include BOTH local development and the production Vercel origin in
+# deployment environments, e.g.
+#   FRONTEND_ORIGIN=http://localhost:5173,https://your-app.vercel.app
+FRONTEND_ORIGIN = os.getenv(
+    "FRONTEND_ORIGIN",
+    "http://localhost:5173,http://localhost:5174,http://localhost:5175,"
+    "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175",
+)
+CORS_ORIGINS = _parse_origins(FRONTEND_ORIGIN)
 
 # --- Resume upload ---
 RESUME_MAX_SIZE_BYTES = int(os.getenv("RESUME_MAX_SIZE_MB", "5")) * 1024 * 1024

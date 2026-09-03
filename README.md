@@ -207,7 +207,7 @@ Architecture, specs, and plans live in [`docs/`](docs/PROJECT_SPEC.md):
 | `ALIBABA_CLOUD_API_KEY` | Your Alibaba Cloud / Qwen API key |
 | `ALIBABA_CLOUD_BASE_URL` | Your Alibaba Cloud workspace endpoint |
 | `ALIBABA_CLOUD_MODEL` | `qwen-plus` (or your preferred model) |
-| `FRONTEND_ORIGIN` | Your Vercel production URL (e.g. `https://careerpilot.vercel.app`) |
+| `FRONTEND_ORIGIN` | Comma-separated allowed CORS origins — include both, e.g. `http://localhost:5173,https://careerpilot.vercel.app` |
 
 6. **Health check path:** `/api/health`
 7. A `render.yaml` blueprint is included at the repository root for one-click deploy.
