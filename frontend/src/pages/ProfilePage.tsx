@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   User,
-  Sparkles,
   CheckCircle2,
   Save,
   RefreshCw,
@@ -90,76 +89,72 @@ export function ProfilePage() {
   const parsedSkills = skillsText.split(',').map((s) => s.trim()).filter(Boolean)
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-            <span>AI Context Provider</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-            Career Profile & Goals
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            Career Profile & Preferences
           </h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            This profile serves as the foundational context for your AI Mentor, Roadmap Generator, and Mock Interview simulations.
+          <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">
+            This profile provides foundational context for AI Mentorship, Roadmap generation, and Mock Interviews.
           </p>
         </div>
 
         {savedAt && (
-          <div className="inline-flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800 animate-fade-in self-start sm:self-auto">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-800 self-start sm:self-auto">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
             <span>Profile saved at {savedAt}</span>
           </div>
         )}
       </div>
 
       {isLoading && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center animate-pulse">
-          <RefreshCw className="h-8 w-8 animate-spin text-brand-600 mx-auto mb-3" />
-          <p className="text-xs text-slate-500 font-medium">Loading your profile data…</p>
+        <div className="clean-card p-10 text-center animate-pulse">
+          <RefreshCw className="h-6 w-6 animate-spin text-slate-500 mx-auto mb-2" />
+          <p className="text-xs text-slate-500 font-medium">Loading profile data…</p>
         </div>
       )}
 
       {loadError && (
-        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-xs text-rose-800 flex items-center justify-between">
+        <div className="clean-card p-4 border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-center justify-between">
           <span>Failed to load profile: {loadError}</span>
-          <button type="button" onClick={loadProfile} className="font-bold underline">
+          <button type="button" onClick={loadProfile} className="font-semibold underline">
             Retry
           </button>
         </div>
       )}
 
       {!isLoading && !loadError && (
-        <div className="grid gap-8 lg:grid-cols-12 items-start">
+        <div className="grid gap-6 lg:grid-cols-12 items-start">
           {/* Left Form Panel */}
           <form
             onSubmit={handleSubmit}
-            className="lg:col-span-7 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6"
+            className="lg:col-span-7 clean-card p-5 sm:p-6 space-y-4"
           >
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <User className="h-4 w-4 text-brand-600" />
-              <span>Personal & Career Details</span>
-            </h2>
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+              <User className="h-4 w-4 text-slate-700" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                Personal & Career Details
+              </h2>
+            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 text-xs">
+            <div className="grid gap-3.5 sm:grid-cols-2 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
+                <label className="block font-medium text-slate-700 mb-1">
                   Degree / Education Level
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={education}
-                    onChange={(e) => setEducation(e.target.value)}
-                    placeholder="e.g. BS in Computer Science"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={education}
+                  onChange={(e) => setEducation(e.target.value)}
+                  placeholder="e.g. BS in Computer Science"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
+                />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
+                <label className="block font-medium text-slate-700 mb-1">
                   University / Institution
                 </label>
                 <input
@@ -167,16 +162,16 @@ export function ProfilePage() {
                   value={university}
                   onChange={(e) => setUniversity(e.target.value)}
                   placeholder="e.g. Stanford University"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">Experience Level</label>
+                <label className="block font-medium text-slate-700 mb-1">Experience Level</label>
                 <select
                   value={experienceLevel}
                   onChange={(e) => setExperienceLevel(e.target.value as ExperienceLevel)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
                 >
                   {EXPERIENCE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -187,7 +182,7 @@ export function ProfilePage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
+                <label className="block font-medium text-slate-700 mb-1">
                   Target Role Title <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -196,13 +191,13 @@ export function ProfilePage() {
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value)}
                   placeholder="e.g. AI Application Engineer"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
                 />
               </div>
             </div>
 
             <div className="text-xs">
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Primary Career Goal / Aspiration
               </label>
               <textarea
@@ -210,12 +205,12 @@ export function ProfilePage() {
                 value={careerGoal}
                 onChange={(e) => setCareerGoal(e.target.value)}
                 placeholder="e.g. Land a software engineering role at a high-growth AI startup within 6 months."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none leading-relaxed"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
               />
             </div>
 
             <div className="text-xs">
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Key Skills (Comma-separated)
               </label>
               <textarea
@@ -223,15 +218,15 @@ export function ProfilePage() {
                 value={skillsText}
                 onChange={(e) => setSkillsText(e.target.value)}
                 placeholder="e.g. Python, FastAPI, React, TypeScript, Docker, Machine Learning"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none leading-relaxed"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
               />
               <p className="mt-1 text-[11px] text-slate-400">
-                Type your skills separated by commas to convert them into AI recognition tags.
+                Skills entered here are indexed across your AI Mentor and Readiness metrics.
               </p>
             </div>
 
             {saveError && (
-              <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800">
+              <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
                 {saveError}
               </div>
             )}
@@ -240,16 +235,16 @@ export function ProfilePage() {
               <button
                 type="submit"
                 disabled={isSaving || !targetRole.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50"
+                className="btn-primary text-xs py-2 px-4"
               >
                 {isSaving ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     <span>Saving Profile…</span>
                   </>
                 ) : (
                   <>
-                    <Save className="h-4 w-4" />
+                    <Save className="h-3.5 w-3.5" />
                     <span>Save Career Profile</span>
                   </>
                 )}
@@ -258,32 +253,32 @@ export function ProfilePage() {
           </form>
 
           {/* Right Live Preview Card */}
-          <div className="lg:col-span-5 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">Profile Live Preview</h3>
-              <span className="rounded-full bg-brand-50 border border-brand-200 px-2.5 py-0.5 text-[10px] font-bold text-brand-700">
-                AI Context View
+          <div className="lg:col-span-5 clean-card p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-900">Profile Live Preview</h3>
+              <span className="rounded bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                Active Context
               </span>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100 space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="space-y-3.5 text-xs">
+              <div className="rounded-lg bg-slate-50 p-3.5 border border-slate-200/80 space-y-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Target Trajectory
                 </span>
-                <p className="text-base font-bold text-slate-900">
+                <p className="text-sm font-bold text-slate-900">
                   {targetRole || 'Target Role Not Set'}
                 </p>
-                <p className="text-slate-500 capitalize">
+                <p className="text-slate-500 capitalize text-[11px]">
                   Level: {experienceLevel.replace('-', ' ')}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Academic Background
                 </span>
-                <p className="font-semibold text-slate-800">
+                <p className="font-medium text-slate-800 text-xs">
                   {education || 'Education not specified'}{' '}
                   {university ? `· ${university}` : ''}
                 </p>
@@ -291,28 +286,26 @@ export function ProfilePage() {
 
               {careerGoal && (
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     Primary Goal
                   </span>
-                  <p className="text-slate-700 leading-relaxed italic bg-brand-50/40 p-3 rounded-xl border border-brand-100/60">
+                  <p className="text-slate-700 leading-relaxed italic bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
                     "{careerGoal}"
                   </p>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Skills Tag Cloud ({parsedSkills.length})
-                  </span>
-                </div>
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Skills Inventory ({parsedSkills.length})
+                </span>
 
                 {parsedSkills.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {parsedSkills.map((s) => (
                       <span
                         key={s}
-                        className="rounded-xl bg-slate-100 border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-800"
+                        className="rounded-md bg-slate-100 border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-800"
                       >
                         {s}
                       </span>

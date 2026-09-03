@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   BookOpen,
-  Sparkles,
   Database,
   Search,
   UploadCloud,
@@ -14,6 +13,7 @@ import {
   ChevronUp,
   Bot,
   User,
+  MessageSquare,
 } from 'lucide-react'
 
 import { MessageContent } from '../components/chat/MessageContent'
@@ -38,7 +38,7 @@ function categoryBadge(category: string): { bg: string; color: string; label: st
     case 'job_description':
       return { bg: 'bg-indigo-50 border-indigo-200', color: 'text-indigo-700', label: 'Job Description' }
     case 'interview_guide':
-      return { bg: 'bg-purple-50 border-purple-200', color: 'text-purple-700', label: 'Interview Guide' }
+      return { bg: 'bg-slate-100 border-slate-200', color: 'text-slate-800', label: 'Interview Guide' }
     case 'skill_framework':
       return { bg: 'bg-teal-50 border-teal-200', color: 'text-teal-700', label: 'Skill Framework' }
     default:
@@ -68,7 +68,7 @@ export function RagKnowledgePage() {
     {
       id: 'welcome',
       sender: 'ai',
-      text: 'Hello! I am your **RAG Grounded Career Advisor**. Upload target job descriptions, industry rubrics, or interview guides in the **Knowledge Hub**, and ask me any questions! I will ground my answers strictly in your uploaded knowledge base with source citations.',
+      text: 'Hello! I am your **Grounded Career Advisor**. Upload target job descriptions, industry rubrics, or interview guides in the **Knowledge Base**, and ask any questions. I will cite answers directly from your documents.',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ])
@@ -124,7 +124,7 @@ export function RagKnowledgePage() {
     try {
       await ragService.deleteDocument(docId)
       setDocuments((prev) => prev.filter((d) => d.id !== docId))
-      setSuccessMsg('Document removed successfully from knowledge base.')
+      setSuccessMsg('Document removed from knowledge base.')
     } catch (err) {
       setError(describeApiError(err).message)
     }
@@ -184,28 +184,24 @@ export function RagKnowledgePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-            <span>MongoDB Vector Store + Qwen-Max RAG</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
             RAG Grounded Career Advisor
           </h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Ingest custom job specs, interview rubrics, and career guides into vector storage for hallucination-free, verified AI guidance.
+          <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">
+            Ingest custom job specs, rubrics, and career guides into vector storage for grounded, verified AI guidance.
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="inline-flex rounded-2xl bg-slate-100 p-1.5 border border-slate-200 self-start sm:self-auto text-xs">
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 self-start sm:self-auto text-xs">
           {[
-            { id: 'chat' as const, label: 'RAG Advisor Chat', icon: Sparkles },
-            { id: 'documents' as const, label: `Knowledge Hub (${documents.length})`, icon: Database },
-            { id: 'query' as const, label: 'Vector Explorer', icon: Search },
+            { id: 'chat' as const, label: 'Advisor Chat', icon: MessageSquare },
+            { id: 'documents' as const, label: `Knowledge Base (${documents.length})`, icon: Database },
+            { id: 'query' as const, label: 'Vector Search', icon: Search },
           ].map((t) => {
             const Icon = t.icon
             const isSelected = activeTab === t.id
@@ -214,9 +210,9 @@ export function RagKnowledgePage() {
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-bold transition ${
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition ${
                   isSelected
-                    ? 'bg-white text-brand-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -230,24 +226,24 @@ export function RagKnowledgePage() {
 
       {/* Global Alerts */}
       {successMsg && (
-        <div className="flex items-center justify-between rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-xs text-emerald-800 animate-fade-in">
+        <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800 animate-fade-in">
           <span className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             {successMsg}
           </span>
-          <button type="button" onClick={() => setSuccessMsg(null)} className="font-bold underline">
+          <button type="button" onClick={() => setSuccessMsg(null)} className="font-medium underline">
             Dismiss
           </button>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center justify-between rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs text-rose-800 animate-fade-in">
+        <div className="flex items-center justify-between rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 animate-fade-in">
           <span className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-rose-600" />
             {error}
           </span>
-          <button type="button" onClick={() => setError(null)} className="font-bold underline">
+          <button type="button" onClick={() => setError(null)} className="font-medium underline">
             Dismiss
           </button>
         </div>
@@ -255,50 +251,50 @@ export function RagKnowledgePage() {
 
       {/* ── Tab 1: RAG Chat ─────────────────────────────────────────────── */}
       {activeTab === 'chat' && (
-        <div className="flex flex-col min-h-[500px] space-y-6">
+        <div className="flex flex-col min-h-[450px] space-y-4">
           {documents.length === 0 && (
-            <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6 flex items-start justify-between gap-4">
-              <div className="space-y-1 text-xs">
-                <p className="font-bold text-amber-900">Knowledge Hub is currently empty</p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 flex items-start justify-between gap-3">
+              <div className="space-y-0.5 text-xs">
+                <p className="font-semibold text-amber-900">Knowledge Base is currently empty</p>
                 <p className="text-amber-700">
-                  Switch to the <button type="button" onClick={() => setActiveTab('documents')} className="underline font-semibold">Knowledge Hub tab</button> to upload job descriptions or interview guides. Answers will then be cited directly from your docs.
+                  Switch to the <button type="button" onClick={() => setActiveTab('documents')} className="underline font-semibold">Knowledge Base tab</button> to ingest job specs or company guides for grounded answers.
                 </p>
               </div>
             </div>
           )}
 
           {/* Chat Messages */}
-          <div className="space-y-5">
+          <div className="space-y-4">
             {chatMessages.map((msg) => {
               const isUser = msg.sender === 'user'
               const isSourcesExpanded = expandedSources[msg.id]
 
               return (
-                <div key={msg.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-700 to-indigo-600 text-white shadow-xs">
-                      <Bot className="h-4 w-4" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white shadow-xs mt-0.5">
+                      <Bot className="h-3.5 w-3.5" />
                     </div>
                   )}
 
                   <div
-                    className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-4 sm:p-5 shadow-xs ${
+                    className={`max-w-[85%] sm:max-w-[75%] rounded-xl p-3.5 sm:p-4 text-xs ${
                       isUser
-                        ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-br-xs'
-                        : 'bg-white border border-slate-200/80 text-slate-800 rounded-bl-xs'
+                        ? 'bg-slate-900 text-white rounded-br-xs'
+                        : 'clean-card text-slate-800 rounded-bl-xs'
                     }`}
                   >
                     {isUser ? (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                     ) : (
-                      <div className="text-sm leading-relaxed prose prose-sm max-w-none text-slate-800">
+                      <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900">
                         <MessageContent content={msg.text} />
                       </div>
                     )}
 
                     {/* Grounded Document Citations */}
                     {!isUser && msg.sources && msg.sources.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-slate-100">
+                      <div className="mt-3 pt-2.5 border-t border-slate-100">
                         <button
                           type="button"
                           onClick={() =>
@@ -307,10 +303,10 @@ export function RagKnowledgePage() {
                               [msg.id]: !prev[msg.id],
                             }))
                           }
-                          className="flex items-center justify-between w-full text-[11px] font-bold text-brand-700 bg-brand-50/60 p-2 rounded-xl border border-brand-100"
+                          className="flex items-center justify-between w-full text-[11px] font-medium text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200"
                         >
                           <span className="flex items-center gap-1.5">
-                            <BookOpen className="h-3.5 w-3.5" />
+                            <BookOpen className="h-3.5 w-3.5 text-slate-500" />
                             <span>Grounded in {msg.sources.length} Verified Sources</span>
                           </span>
                           {isSourcesExpanded ? (
@@ -321,15 +317,15 @@ export function RagKnowledgePage() {
                         </button>
 
                         {isSourcesExpanded && (
-                          <div className="mt-2 space-y-2">
+                          <div className="mt-2 space-y-1.5">
                             {msg.sources.map((src, idx) => (
                               <div
                                 key={idx}
-                                className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-[11px] space-y-1"
+                                className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5 text-[11px] space-y-0.5"
                               >
-                                <div className="flex items-center justify-between text-slate-600 font-bold">
+                                <div className="flex items-center justify-between text-slate-700 font-semibold">
                                   <span>{src.document_title}</span>
-                                  <span className="text-[10px] text-brand-600">
+                                  <span className="text-[10px] text-slate-500">
                                     Sim: {(src.similarity_score * 100).toFixed(0)}%
                                   </span>
                                 </div>
@@ -344,8 +340,8 @@ export function RagKnowledgePage() {
                     )}
 
                     <div
-                      className={`mt-2 flex items-center justify-between text-[10px] ${
-                        isUser ? 'text-brand-200' : 'text-slate-400'
+                      className={`mt-1.5 flex items-center justify-between text-[10px] ${
+                        isUser ? 'text-slate-400' : 'text-slate-400'
                       }`}
                     >
                       <span>{msg.timestamp}</span>
@@ -354,8 +350,8 @@ export function RagKnowledgePage() {
                   </div>
 
                   {isUser && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-700 shadow-xs">
-                      <User className="h-4 w-4" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shadow-xs mt-0.5">
+                      <User className="h-3.5 w-3.5" />
                     </div>
                   )}
                 </div>
@@ -363,52 +359,54 @@ export function RagKnowledgePage() {
             })}
 
             {isSendingChat && (
-              <div className="flex gap-3 items-center text-xs text-slate-500 animate-pulse">
-                <RefreshCw className="h-4 w-4 animate-spin text-brand-600" />
-                <span>Searching vector chunks & generating grounded response…</span>
+              <div className="flex gap-2 items-center text-xs text-slate-500">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-600" />
+                <span>Searching vector store & drafting response…</span>
               </div>
             )}
           </div>
 
           {/* Floating Composer */}
-          <div className="sticky bottom-0 z-10 bg-slate-50/95 pt-2 pb-4 backdrop-blur-md">
+          <div className="sticky bottom-0 z-10 bg-slate-50/95 pt-2 pb-4">
             <form
               onSubmit={handleSendChat}
-              className="rounded-3xl border border-slate-300/90 bg-white shadow-card p-2 flex items-center gap-2 focus-within:border-brand-500"
+              className="clean-card p-1.5 flex items-center gap-2 focus-within:border-slate-400"
             >
               <input
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="Ask any question grounded in your uploaded career documents..."
-                className="flex-1 border-0 px-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                className="flex-1 border-0 px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={isSendingChat || !inputMessage.trim()}
-                className="inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:brightness-110 active:scale-98 disabled:opacity-50 transition shrink-0"
+                className="btn-primary text-xs py-1.5 px-3.5 shrink-0"
               >
                 <span>Send</span>
-                <Send className="h-3.5 w-3.5" />
+                <Send className="h-3 w-3" />
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ── Tab 2: Knowledge Hub (Document Management) ──────────────────── */}
+      {/* ── Tab 2: Knowledge Base (Document Management) ──────────────────── */}
       {activeTab === 'documents' && (
-        <div className="grid gap-8 lg:grid-cols-12 items-start">
+        <div className="grid gap-6 lg:grid-cols-12 items-start">
           {/* Upload Document Form */}
-          <div className="lg:col-span-5 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <UploadCloud className="h-4 w-4 text-brand-600" />
-              <span>Ingest Document to Vector Store</span>
-            </h2>
+          <div className="lg:col-span-5 clean-card p-5 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+              <UploadCloud className="h-4 w-4 text-slate-700" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                Ingest Document
+              </h2>
+            </div>
 
-            <form onSubmit={handleIngest} className="space-y-4 text-xs">
+            <form onSubmit={handleIngest} className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
+                <label className="block font-medium text-slate-700 mb-1">
                   Document Title <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -417,12 +415,12 @@ export function RagKnowledgePage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. OpenAI Senior Backend Job Spec"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Category</label>
+                <label className="block font-medium text-slate-700 mb-1">Category</label>
                 <select
                   value={category}
                   onChange={(e) =>
@@ -434,7 +432,7 @@ export function RagKnowledgePage() {
                         | 'general'
                     )
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
                 >
                   <option value="job_description">Job Description</option>
                   <option value="interview_guide">Interview Guide</option>
@@ -444,7 +442,7 @@ export function RagKnowledgePage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
+                <label className="block font-medium text-slate-700 mb-1">
                   Text Content <span className="text-rose-500">*</span>
                 </label>
                 <textarea
@@ -452,24 +450,24 @@ export function RagKnowledgePage() {
                   rows={8}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste raw text, requirements, or rubrics here. The system will chunk and embed it automatically into vector space."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none leading-relaxed"
+                  placeholder="Paste text, requirements, or rubrics here..."
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isUploading || !title.trim() || !content.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-3 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50"
+                className="w-full btn-primary text-xs py-2 px-4"
               >
                 {isUploading ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     <span>Chunking & Embedding…</span>
                   </>
                 ) : (
                   <>
-                    <Database className="h-4 w-4" />
+                    <Database className="h-3.5 w-3.5" />
                     <span>Ingest Document</span>
                   </>
                 )}
@@ -478,10 +476,10 @@ export function RagKnowledgePage() {
           </div>
 
           {/* Document Library Table */}
-          <div className="lg:col-span-7 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">
-                Vector Knowledge Base ({documents.length})
+          <div className="lg:col-span-7 clean-card p-5 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Indexed Documents ({documents.length})
               </h3>
               <button
                 type="button"
@@ -494,42 +492,42 @@ export function RagKnowledgePage() {
             </div>
 
             {documents.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {documents.map((doc) => {
                   const badge = categoryBadge(doc.category)
                   return (
                     <div
                       key={doc.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/40 p-4 hover:bg-white hover:shadow-xs transition"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-white transition"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900">{doc.title}</span>
+                          <span className="text-xs font-semibold text-slate-900">{doc.title}</span>
                           <span
-                            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${badge.bg} ${badge.color}`}
+                            className={`rounded px-1.5 py-0.2 text-[10px] font-semibold border ${badge.bg} ${badge.color}`}
                           >
                             {badge.label}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500">
-                          {doc.chunk_count} Vector Chunks · Ingested {new Date(doc.created_at).toLocaleDateString()}
+                          {doc.chunk_count} Vector Chunks · Added {new Date(doc.created_at).toLocaleDateString()}
                         </p>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => handleDelete(doc.id)}
-                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition"
                         title="Delete document"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   )
                 })}
               </div>
             ) : (
-              <div className="py-12 text-center text-xs text-slate-400 font-medium">
+              <div className="py-8 text-center text-xs text-slate-400">
                 No documents in knowledge base yet. Ingest your first document on the left.
               </div>
             )}
@@ -539,11 +537,11 @@ export function RagKnowledgePage() {
 
       {/* ── Tab 3: Vector Explorer ──────────────────────────────────────── */}
       {activeTab === 'query' && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6">
+        <div className="clean-card p-5 sm:p-6 space-y-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Semantic Vector Search Tester</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Semantic Vector Search</h2>
             <p className="text-xs text-slate-500">
-              Query your MongoDB vector embeddings to inspect the most similar text chunks and relevance scores.
+              Query vector embeddings directly to inspect matching text chunks and cosine similarity scores.
             </p>
           </div>
 
@@ -552,35 +550,35 @@ export function RagKnowledgePage() {
               type="text"
               value={queryText}
               onChange={(e) => setQueryText(e.target.value)}
-              placeholder="e.g. distributed systems requirements, behavioral leadership principles"
-              className="flex-1 rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none"
+              placeholder="e.g. distributed systems requirements, system design principles"
+              className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none"
             />
             <button
               type="submit"
               disabled={isSearching || !queryText.trim()}
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50 transition shrink-0"
+              className="btn-primary text-xs py-2 px-4 shrink-0"
             >
-              {isSearching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              {isSearching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               <span>Search Chunks</span>
             </button>
           </form>
 
           {queryResults.length > 0 && (
-            <div className="space-y-4 pt-4 border-t border-slate-100">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Top Matching Vector Chunks ({queryResults.length})
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Top Matching Chunks ({queryResults.length})
               </h3>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 {queryResults.map((chunk, idx) => (
                   <div
                     key={idx}
-                    className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-2 text-xs"
+                    className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 space-y-1 text-xs"
                   >
-                    <div className="flex items-center justify-between text-slate-700 font-bold">
-                      <span className="truncate max-w-[200px]">{chunk.document_title}</span>
-                      <span className="rounded-full bg-brand-50 text-brand-700 border border-brand-200 px-2 py-0.5 text-[10px]">
-                        Similarity: {(chunk.similarity_score * 100).toFixed(1)}%
+                    <div className="flex items-center justify-between text-slate-700 font-semibold">
+                      <span className="truncate max-w-[180px]">{chunk.document_title}</span>
+                      <span className="rounded bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.2 text-[10px]">
+                        {(chunk.similarity_score * 100).toFixed(1)}% Match
                       </span>
                     </div>
                     <p className="text-slate-600 leading-relaxed text-[11px]">{chunk.content}</p>

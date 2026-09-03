@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Target,
-  Sparkles,
   ArrowRight,
   CheckCircle2,
   AlertTriangle,
@@ -111,38 +110,34 @@ export function SkillGapPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-            <span>AI Competency Benchmarking</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
             Skill Gap Analyzer
           </h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Benchmark your current experience and skills against specific target job requirements to find missing competencies.
+          <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">
+            Benchmark current skills against target job requirements to identify missing competencies and training priorities.
           </p>
         </div>
       </div>
 
       {/* ── Prerequisite banner if no resume ─────────────────────────────── */}
       {!hasResume && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-6 shadow-xs">
-          <div className="flex items-start gap-3">
-            <FileText className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+          <div className="flex items-start gap-2.5">
+            <FileText className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-bold text-amber-900">No Resume Analyzed Yet</p>
-              <p className="text-xs text-amber-700 mt-0.5">
-                Upload your CV to automatically populate skills and calculate an accurate gap matrix.
+              <p className="text-xs font-semibold text-amber-900">No Resume Analyzed Yet</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                Upload your resume first to automatically pre-fill your skills inventory.
               </p>
             </div>
           </div>
           <Link
             to="/resume"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-700 transition shrink-0"
+            className="btn-secondary self-start sm:self-auto text-xs py-1.5 px-3 shrink-0"
           >
             <span>Analyze Resume</span>
             <ArrowRight className="h-3.5 w-3.5" />
@@ -152,15 +147,15 @@ export function SkillGapPage() {
 
       {/* ── Pre-fill notice ──────────────────────────────────────────────── */}
       {prefillNotice && (
-        <div className="flex items-center justify-between rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-xs text-emerald-800">
+        <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-200 px-3.5 py-2 text-xs text-emerald-800">
           <span className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
             {prefillNotice}
           </span>
           <button
             type="button"
             onClick={() => setPrefillNotice(null)}
-            className="font-bold underline hover:text-emerald-950"
+            className="font-medium text-[11px] underline hover:text-emerald-950"
           >
             Dismiss
           </button>
@@ -168,30 +163,32 @@ export function SkillGapPage() {
       )}
 
       {/* ── Main 2-Column Workspace ──────────────────────────────────────── */}
-      <div className="grid gap-8 lg:grid-cols-12 items-start">
+      <div className="grid gap-6 lg:grid-cols-12 items-start">
         {/* Left Form Panel */}
-        <div className="lg:col-span-5 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-5">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Target className="h-4 w-4 text-brand-600" />
-            <span>Target Role Parameters</span>
-          </h2>
+        <div className="lg:col-span-5 clean-card p-5 sm:p-6 space-y-4">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+            <Target className="h-4 w-4 text-slate-700" />
+            <h2 className="text-sm font-semibold text-slate-900">
+              Target Role Parameters
+            </h2>
+          </div>
 
-          <div className="space-y-4 text-xs">
+          <div className="space-y-3.5 text-xs">
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Target Role Title <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value)}
-                placeholder="e.g. Senior Frontend Engineer, ML Systems Engineer"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                placeholder="e.g. Senior Frontend Engineer, ML Engineer"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Target Job Description / Requirements <span className="text-rose-500">*</span>
               </label>
               <textarea
@@ -199,12 +196,12 @@ export function SkillGapPage() {
                 value={targetJobDescription}
                 onChange={(e) => setTargetJobDescription(e.target.value)}
                 placeholder="Paste the target job description or requirements here..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Your Current Skills / Background <span className="text-rose-500">*</span>
               </label>
               <textarea
@@ -212,13 +209,13 @@ export function SkillGapPage() {
                 value={resumeData}
                 onChange={(e) => setResumeData(e.target.value)}
                 placeholder="Your skills summary, extracted resume text, or background..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
               />
             </div>
           </div>
 
           {error && (
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800">
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
               {error}
             </div>
           )}
@@ -227,16 +224,16 @@ export function SkillGapPage() {
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-3 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full btn-primary text-xs py-2.5 px-4"
           >
             {isLoading ? (
               <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Benchmarking with Qwen AI…</span>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                <span>Benchmarking skills…</span>
               </>
             ) : (
               <>
-                <Sparkles className="h-4 w-4" />
+                <Target className="h-3.5 w-3.5" />
                 <span>Run Gap Analysis</span>
               </>
             )}
@@ -244,18 +241,18 @@ export function SkillGapPage() {
         </div>
 
         {/* Right Results Panel */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-5">
           {result ? (
             <GapAnalysisResultsView result={result} onProceedToRoadmap={() => navigate('/roadmap')} />
           ) : (
-            <div className="rounded-3xl border border-slate-200/80 bg-white p-10 shadow-card text-center space-y-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-brand-50 text-brand-600 mx-auto">
-                <Target className="h-8 w-8" />
+            <div className="clean-card p-8 sm:p-10 text-center space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-slate-600 mx-auto">
+                <Target className="h-6 w-6" />
               </div>
-              <div className="space-y-1 max-w-sm mx-auto">
-                <h3 className="text-base font-bold text-slate-900">No Gap Analysis Run Yet</h3>
+              <div className="space-y-1 max-w-xs mx-auto">
+                <h3 className="text-sm font-semibold text-slate-900">No Gap Analysis Run Yet</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Enter your target role and paste the job description on the left to generate an AI-powered gap breakdown.
+                  Enter your target role and job description on the left to benchmark your profile against real job expectations.
                 </p>
               </div>
             </div>
@@ -277,25 +274,25 @@ function GapAnalysisResultsView({
   const matchInfo = matchBadge(analysis.match_score)
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Match Overview Card */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+      <div className="clean-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             Target Match Evaluation
           </span>
-          <h2 className="text-lg font-bold text-slate-900 mt-1">{result.target_role}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h2 className="text-base font-bold text-slate-900 mt-0.5">{result.target_role}</h2>
+          <p className="text-xs text-slate-500">
             Analyzed {new Date(result.created_at).toLocaleDateString()}
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-center">
-            <span className="text-3xl font-extrabold text-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <span className="text-3xl font-bold text-slate-900">
               {analysis.match_score}%
             </span>
-            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold mt-1 ${matchInfo.bg} ${matchInfo.border} ${matchInfo.color}`}>
+            <span className={`block rounded px-2 py-0.5 text-[10px] font-semibold border mt-0.5 ${matchInfo.bg} ${matchInfo.border} ${matchInfo.color}`}>
               {matchInfo.text}
             </span>
           </div>
@@ -304,10 +301,10 @@ function GapAnalysisResultsView({
 
       {/* Summary Callout */}
       {analysis.summary && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-2">
-          <div className="flex items-center gap-2">
-            <Lightbulb className="h-4 w-4 text-brand-600" />
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+        <div className="clean-card p-5 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <Lightbulb className="h-4 w-4 text-slate-600" />
+            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
               AI Analysis Summary
             </h3>
           </div>
@@ -315,13 +312,13 @@ function GapAnalysisResultsView({
         </div>
       )}
 
-      {/* Missing Skills Grid (Technical vs Soft Skills) */}
-      <div className="grid gap-6 sm:grid-cols-2">
+      {/* Missing Skills Grid */}
+      <div className="grid gap-4 sm:grid-cols-2">
         {/* Missing Technical Skills */}
-        <div className="rounded-3xl border border-rose-200/80 bg-rose-50/20 p-6 shadow-card">
+        <div className="clean-card p-5 border-rose-200/80 bg-rose-50/20">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="h-4 w-4 text-rose-600" />
-            <h3 className="text-xs font-bold text-rose-900 uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-rose-900 uppercase tracking-wider">
               Missing Technical Skills ({analysis.missing_technical_skills.length})
             </h3>
           </div>
@@ -329,7 +326,7 @@ function GapAnalysisResultsView({
             {analysis.missing_technical_skills.map((skill) => (
               <span
                 key={skill}
-                className="rounded-xl bg-rose-100/80 border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-800"
+                className="rounded bg-rose-100/80 border border-rose-200 px-2 py-0.5 text-xs font-medium text-rose-800"
               >
                 {skill}
               </span>
@@ -338,10 +335,10 @@ function GapAnalysisResultsView({
         </div>
 
         {/* Missing Soft Skills */}
-        <div className="rounded-3xl border border-amber-200/80 bg-amber-50/20 p-6 shadow-card">
+        <div className="clean-card p-5 border-amber-200/80 bg-amber-50/20">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-amber-900 uppercase tracking-wider">
               Missing Soft Skills ({analysis.missing_soft_skills.length})
             </h3>
           </div>
@@ -349,7 +346,7 @@ function GapAnalysisResultsView({
             {analysis.missing_soft_skills.map((skill) => (
               <span
                 key={skill}
-                className="rounded-xl bg-amber-100/80 border border-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                className="rounded bg-amber-100/80 border border-amber-200 px-2 py-0.5 text-xs font-medium text-amber-800"
               >
                 {skill}
               </span>
@@ -360,10 +357,10 @@ function GapAnalysisResultsView({
 
       {/* Required Proficiencies Breakdown */}
       {analysis.required_proficiencies && analysis.required_proficiencies.length > 0 && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-brand-600" />
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+        <div className="clean-card p-5 space-y-3">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+            <CheckCircle2 className="h-4 w-4 text-slate-700" />
+            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
               Required Competency Framework ({analysis.required_proficiencies.length} Domains)
             </h3>
           </div>
@@ -372,14 +369,14 @@ function GapAnalysisResultsView({
             {analysis.required_proficiencies.map((domain, idx) => (
               <div
                 key={idx}
-                className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-2 text-xs"
+                className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 space-y-1.5 text-xs"
               >
-                <p className="font-bold text-slate-900">{domain.area}</p>
+                <p className="font-semibold text-slate-900">{domain.area}</p>
                 <div className="flex flex-wrap gap-1">
                   {domain.skills.map((s) => (
                     <span
                       key={s}
-                      className="rounded-lg bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                      className="rounded bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700"
                     >
                       {s}
                     </span>
@@ -392,22 +389,22 @@ function GapAnalysisResultsView({
       )}
 
       {/* Bridge to Roadmap */}
-      <div className="rounded-3xl bg-gradient-to-r from-brand-900 to-indigo-950 p-6 sm:p-7 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-brand-300">
-            Action Plan
+      <div className="clean-card p-5 sm:p-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-0.5">
+          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+            Next Action
           </span>
-          <h3 className="text-base font-bold text-white">Transform These Gaps into a Learning Plan</h3>
-          <p className="text-xs text-slate-300">
-            Generate a personalized, time-boxed weekly learning roadmap to bridge every missing skill.
+          <h3 className="text-sm font-semibold text-white">Generate Learning Roadmap from Gaps</h3>
+          <p className="text-xs text-slate-400">
+            Create a structured week-by-week plan to systematically bridge these missing competencies.
           </p>
         </div>
         <button
           type="button"
           onClick={onProceedToRoadmap}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs font-bold text-slate-900 shadow-md hover:bg-brand-50 transition shrink-0"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition shrink-0"
         >
-          <Map className="h-4 w-4 text-brand-600" />
+          <Map className="h-3.5 w-3.5 text-slate-700" />
           <span>Generate Roadmap</span>
         </button>
       </div>

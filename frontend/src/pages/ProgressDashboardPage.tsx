@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Sparkles,
   ArrowRight,
   User,
   FileText,
@@ -12,7 +11,8 @@ import {
   CircleAlert,
   TrendingUp,
   RefreshCw,
-  Zap,
+  MessageSquare,
+  ChevronRight,
 } from 'lucide-react'
 
 import { useAuth } from '../context/AuthContext'
@@ -29,9 +29,9 @@ function scoreBadgeClass(score: number): string {
 }
 
 function scoreTextColor(score: number): string {
-  if (score >= 75) return 'text-emerald-600'
-  if (score >= 50) return 'text-amber-600'
-  return 'text-rose-600'
+  if (score >= 75) return 'text-emerald-700'
+  if (score >= 50) return 'text-amber-700'
+  return 'text-rose-700'
 }
 
 function progressBarColor(score: number): string {
@@ -101,25 +101,28 @@ export function ProgressDashboardPage() {
 
   // Determine top next action
   const topAction = useMemo(() => {
-    if (!data) return { to: '/profile', label: 'Complete your profile' }
-    if (!data.profile.has_profile) return { to: '/profile', label: 'Create your Career Profile' }
-    if (!data.resume.has_analysis) return { to: '/resume', label: 'Upload and analyze your Resume' }
-    if (!data.roadmap?.has_roadmap) return { to: '/roadmap', label: 'Generate your Learning Roadmap' }
-    if (!data.interview?.has_interview) return { to: '/interview', label: 'Start an AI Mock Interview' }
-    return { to: '/mentor', label: 'Consult with Career Mentor' }
+    if (!data) return { to: '/profile', label: 'Complete profile' }
+    if (!data.profile.has_profile) return { to: '/profile', label: 'Create Career Profile' }
+    if (!data.resume.has_analysis) return { to: '/resume', label: 'Analyze Resume' }
+    if (!data.roadmap?.has_roadmap) return { to: '/roadmap', label: 'Generate Roadmap' }
+    if (!data.interview?.has_interview) return { to: '/interview', label: 'Start Mock Interview' }
+    return { to: '/mentor', label: 'Consult Career Mentor' }
   }, [data])
 
   // ── Loading Skeleton ───────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-pulse space-y-8">
-        <div className="h-32 rounded-3xl bg-slate-200/70" />
-        <div className="h-44 rounded-3xl bg-slate-200/70" />
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="h-48 rounded-2xl bg-slate-200/70" />
-          <div className="h-48 rounded-2xl bg-slate-200/70" />
-          <div className="h-48 rounded-2xl bg-slate-200/70" />
-          <div className="h-48 rounded-2xl bg-slate-200/70" />
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <div className="h-20 rounded-xl bg-slate-200/60 animate-pulse" />
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 h-44 rounded-xl bg-slate-200/60 animate-pulse" />
+          <div className="h-44 rounded-xl bg-slate-200/60 animate-pulse" />
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
+          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
+          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
+          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
         </div>
       </div>
     )
@@ -128,17 +131,17 @@ export function ProgressDashboardPage() {
   // ── Error State ────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-        <div className="rounded-3xl border border-rose-200 bg-rose-50/70 p-8 text-center max-w-xl mx-auto shadow-sm">
-          <CircleAlert className="mx-auto h-12 w-12 text-rose-500 mb-3" />
-          <h2 className="text-lg font-bold text-slate-900">Failed to load Dashboard</h2>
-          <p className="mt-1 text-sm text-rose-700">{error}</p>
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
+        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-6 text-center max-w-md mx-auto">
+          <CircleAlert className="mx-auto h-8 w-8 text-rose-500 mb-2" />
+          <h2 className="text-sm font-semibold text-slate-900">Failed to load Dashboard</h2>
+          <p className="mt-1 text-xs text-rose-700">{error}</p>
           <button
             type="button"
             onClick={loadDashboard}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 shadow-xs hover:bg-rose-100 transition"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs hover:bg-rose-50 transition"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
             Try again
           </button>
         </div>
@@ -151,78 +154,60 @@ export function ProgressDashboardPage() {
   const { profile, resume, roadmap, interview, overall_progress, readiness_score, next_steps } = data
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* ── 1. Hero Command Center Banner ───────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-brand-950 p-6 sm:p-8 text-white shadow-xl">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-brand-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 -mb-16 h-48 w-48 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-200 backdrop-blur-xs border border-white/10">
-              <Sparkles className="h-3.5 w-3.5 text-brand-300" />
-              <span>AI Career Command Center</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Welcome back, {user?.name ?? 'Candidate'}
-            </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {profile.target_role ? (
-                <>
-                  Targeting <span className="font-semibold text-white underline decoration-brand-400 underline-offset-4">{profile.target_role}</span>. Keep sharpening your skills and tracking your interview readiness.
-                </>
-              ) : (
-                'Set your target role and complete your profile to unlock customized roadmap and AI interview prep.'
-              )}
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            <Link
-              to={topAction.to}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:shadow-brand-600/50 hover:brightness-110 active:scale-98 transition-all duration-150"
-            >
-              <span>{topAction.label}</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* ── 1. Header Overview ────────────────────────────────────────── */}
+      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            Welcome back, {user?.name ?? 'Candidate'}
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {profile.target_role ? (
+              <>Target role: <span className="font-semibold text-slate-800">{profile.target_role}</span>. Here is your current readiness overview and recommended next steps.</>
+            ) : (
+              'Complete your profile and upload your resume to generate your custom career roadmap.'
+            )}
+          </p>
         </div>
+
+        <Link
+          to={topAction.to}
+          className="btn-primary self-start sm:self-auto text-xs py-2 px-3.5"
+        >
+          <span>{topAction.label}</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </section>
 
-      {/* ── 2. Overall Career Readiness & Key Stats ──────────────────────── */}
-      <section className="grid gap-6 lg:grid-cols-3">
-        {/* Readiness Card */}
-        <div className="lg:col-span-2 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+      {/* ── 2. Career Readiness Summary ─────────────────────────────────── */}
+      <section className="grid gap-5 lg:grid-cols-3">
+        {/* Main Readiness Gauge */}
+        <div className="lg:col-span-2 clean-card p-5 sm:p-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-                <h2 className="text-base font-bold text-slate-900">Career Readiness Score</h2>
+                <TrendingUp className="h-4 w-4 text-slate-700" />
+                <h2 className="text-sm font-semibold text-slate-900">Career Readiness Score</h2>
               </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Calculated from profile completeness, resume ATS match, and interview feedback.
+              <p className="text-xs text-slate-500 mt-0.5">
+                Weighted calculation across profile depth, ATS resume match, and interview performance.
               </p>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold tracking-tight text-slate-900">
-                {overall_progress}%
-              </span>
-              <span className="text-xs font-semibold text-slate-400 uppercase">Readiness</span>
+            <div className="text-right">
+              <span className="text-3xl font-bold text-slate-900">{overall_progress}%</span>
+              <span className="block text-[10px] uppercase font-medium text-slate-400">Overall</span>
             </div>
           </div>
 
-          {/* Progress Bar & Sub-metrics */}
-          <div className="mt-6 space-y-5">
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold text-slate-600">
-                <span>Overall Journey Progress</span>
-                <span>{overall_progress}% Complete</span>
+          <div className="mt-4 space-y-4">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs font-medium text-slate-600">
+                <span>Progress toward job readiness</span>
+                <span>{overall_progress}%</span>
               </div>
-              <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100 p-0.5">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className={`h-full rounded-full transition-all duration-700 ease-out ${progressBarColor(
+                  className={`h-full rounded-full transition-all duration-500 ${progressBarColor(
                     overall_progress
                   )}`}
                   style={{ width: `${Math.max(overall_progress, 4)}%` }}
@@ -231,101 +216,101 @@ export function ProgressDashboardPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-3 pt-2">
-              <div className="rounded-2xl bg-slate-50/80 p-3.5 border border-slate-100">
-                <p className="text-[11px] font-medium text-slate-500">Profile</p>
-                <p className="mt-1 text-lg font-bold text-slate-900">{profile.completeness}%</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
+              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
+                <span className="text-[11px] font-medium text-slate-500">Profile</span>
+                <p className="text-base font-bold text-slate-900 mt-0.5">{profile.completeness}%</p>
+                <span className="text-[10px] text-slate-400">
                   {profile.has_profile ? 'Configured' : 'Incomplete'}
-                </p>
+                </span>
               </div>
 
-              <div className="rounded-2xl bg-slate-50/80 p-3.5 border border-slate-100">
-                <p className="text-[11px] font-medium text-slate-500">Resume ATS</p>
-                <p className={`mt-1 text-lg font-bold ${resume.has_analysis ? scoreTextColor(resume.score) : 'text-slate-400'}`}>
+              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
+                <span className="text-[11px] font-medium text-slate-500">Resume ATS</span>
+                <p className={`text-base font-bold mt-0.5 ${resume.has_analysis ? scoreTextColor(resume.score) : 'text-slate-400'}`}>
                   {resume.has_analysis ? `${resume.score}/100` : '—'}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {resume.has_analysis ? 'AI Evaluated' : 'Not analyzed'}
-                </p>
+                <span className="text-[10px] text-slate-400">
+                  {resume.has_analysis ? 'Analyzed' : 'Pending'}
+                </span>
               </div>
 
-              <div className="rounded-2xl bg-slate-50/80 p-3.5 border border-slate-100">
-                <p className="text-[11px] font-medium text-slate-500">Interview</p>
-                <p className={`mt-1 text-lg font-bold ${interview?.has_interview ? scoreTextColor(interview.latest_score) : 'text-slate-400'}`}>
+              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
+                <span className="text-[11px] font-medium text-slate-500">Interview</span>
+                <p className={`text-base font-bold mt-0.5 ${interview?.has_interview ? scoreTextColor(interview.latest_score) : 'text-slate-400'}`}>
                   {interview?.has_interview ? `${interview.latest_score}/100` : '—'}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {interview?.has_interview ? `${interview.total_interviews} sessions` : 'Pending'}
-                </p>
+                <span className="text-[10px] text-slate-400">
+                  {interview?.has_interview ? `${interview.total_interviews} runs` : 'Not tested'}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ATS Score & Quick Diagnostic */}
-        <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/50 p-6 sm:p-7 shadow-card flex flex-col justify-between">
+        {/* ATS Resume Snapshot */}
+        <div className="clean-card p-5 sm:p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Resume Health
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Resume ATS Status
               </span>
               {resume.has_analysis && (
-                <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${scoreBadgeClass(resume.score)}`}>
-                  {resume.score >= 75 ? 'Job-Ready' : resume.score >= 50 ? 'Moderate' : 'Needs Work'}
+                <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border ${scoreBadgeClass(resume.score)}`}>
+                  {resume.score >= 75 ? 'Job-Ready' : resume.score >= 50 ? 'Moderate' : 'Needs Polish'}
                 </span>
               )}
             </div>
 
             {resume.has_analysis ? (
-              <div className="mt-4 flex items-center gap-4">
-                <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 font-bold text-2xl shadow-xs ${scoreBadgeClass(resume.score)}`}>
+              <div className="mt-3 flex items-center gap-3">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border font-bold text-lg ${scoreBadgeClass(resume.score)}`}>
                   {readiness_score}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">
-                    {resume.score >= 75 ? 'Strong Match' : 'Potential Detected'}
+                  <p className="text-xs font-semibold text-slate-900">
+                    {resume.score >= 75 ? 'Strong Match' : 'Optimization Recommended'}
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {resume.skills_count} skills extracted · {resume.improvements_count} improvements suggested
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {resume.skills_count} skills · {resume.improvements_count} improvements
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-2xl bg-brand-50/50 border border-brand-100 p-4">
-                <p className="text-xs text-brand-800 font-medium leading-relaxed">
-                  No resume evaluated yet. Upload your CV to calculate your ATS readiness score.
+              <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-3">
+                <p className="text-xs text-slate-600">
+                  Upload your CV to calculate your ATS match and benchmark against roles.
                 </p>
               </div>
             )}
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100">
+          <div className="mt-4 pt-3 border-t border-slate-100">
             <Link
               to="/resume"
-              className="flex items-center justify-between text-xs font-bold text-brand-600 hover:text-brand-700 transition group"
+              className="flex items-center justify-between text-xs font-medium text-slate-700 hover:text-slate-900 transition"
             >
-              <span>{resume.has_analysis ? 'View Resume Breakdown' : 'Upload Resume for Analysis'}</span>
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+              <span>{resume.has_analysis ? 'View resume breakdown' : 'Upload resume'}</span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── 3. Career Journey Tracker Pipeline ───────────────────────────── */}
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+      {/* ── 3. Career Progression Pipeline ─────────────────────────────── */}
+      <section className="clean-card p-5 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Your AI Career Journey</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Career Acceleration Sequence</h2>
             <p className="text-xs text-slate-500">
-              Follow this verified acceleration sequence to become fully job-ready.
+              Structured step-by-step path from profile setup to final mock interview.
             </p>
           </div>
-          <span className="text-xs font-semibold text-brand-600 bg-brand-50 px-3 py-1 rounded-full border border-brand-100 self-start sm:self-auto">
-            End-to-End Pipeline
+          <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 hidden sm:inline">
+            Step {profile.has_profile ? (resume.has_analysis ? (roadmap?.has_roadmap ? '4 of 6' : '3 of 6') : '2 of 6') : '1 of 6'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           <JourneyStep
             step={1}
             title="Profile"
@@ -359,7 +344,7 @@ export function ProgressDashboardPage() {
             title="AI Mentor"
             status={profile.has_profile ? 'active' : 'upcoming'}
             to="/mentor"
-            icon={Sparkles}
+            icon={MessageSquare}
           />
           <JourneyStep
             step={6}
@@ -371,77 +356,77 @@ export function ProgressDashboardPage() {
         </div>
       </section>
 
-      {/* ── 4. Four Core Module Status Cards ─────────────────────────────── */}
-      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ── 4. Core Module Status Cards ─────────────────────────────────── */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Profile Card */}
         <ModuleCard
           icon={User}
-          title="Career Profile"
-          badge={profile.has_profile ? `${profile.completeness}% Ready` : 'Not Set'}
+          title="Profile"
+          badge={profile.has_profile ? `${profile.completeness}%` : 'Incomplete'}
           badgeColor={profile.has_profile ? 'emerald' : 'amber'}
         >
           {profile.has_profile ? (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span className="text-slate-400">Target Role:</span>
-                <span className="font-semibold text-slate-800 truncate max-w-[130px]">{profile.target_role || 'Not specified'}</span>
+                <span className="font-medium text-slate-800 truncate max-w-[120px]">{profile.target_role || 'Not specified'}</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span className="text-slate-400">Level:</span>
-                <span className="font-medium text-slate-700">{experienceLabel(profile.experience_level || 'student')}</span>
+                <span className="text-slate-700">{experienceLabel(profile.experience_level || 'student')}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Skills Listed:</span>
-                <span className="font-medium text-slate-700">{profile.skills_count}</span>
+                <span className="text-slate-400">Skills:</span>
+                <span className="text-slate-700">{profile.skills_count}</span>
               </div>
             </div>
           ) : (
             <p className="text-xs text-slate-500">
-              Create your profile to ground the AI in your educational background and career goals.
+              Set up your education and career goals for personalized recommendations.
             </p>
           )}
           <Link
             to="/profile"
-            className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 group"
+            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
           >
-            <span>{profile.has_profile ? 'Edit Profile' : 'Set Up Profile'}</span>
-            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            <span>{profile.has_profile ? 'Edit profile' : 'Set up profile'}</span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
           </Link>
         </ModuleCard>
 
         {/* Resume Card */}
         <ModuleCard
           icon={FileText}
-          title="Resume Status"
+          title="Resume Analyzer"
           badge={resume.has_analysis ? `Score ${resume.score}` : 'Pending'}
           badgeColor={resume.has_analysis ? (resume.score >= 75 ? 'emerald' : 'amber') : 'slate'}
         >
           {resume.has_analysis ? (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Skills Detected:</span>
-                <span className="font-semibold text-slate-800">{resume.skills_count}</span>
+                <span className="text-slate-400">Detected:</span>
+                <span className="font-medium text-slate-800">{resume.skills_count} skills</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span className="text-slate-400">Improvements:</span>
-                <span className="font-medium text-slate-700">{resume.improvements_count} suggestions</span>
+                <span className="text-slate-700">{resume.improvements_count} suggestions</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Total Runs:</span>
-                <span className="font-medium text-slate-700">{resume.total_analyses}</span>
+                <span className="text-slate-400">Analyses:</span>
+                <span className="text-slate-700">{resume.total_analyses}</span>
               </div>
             </div>
           ) : (
             <p className="text-xs text-slate-500">
-              Upload your PDF resume to extract skills and receive ATS optimization feedback.
+              Upload PDF to extract skills and receive ATS optimization suggestions.
             </p>
           )}
           <Link
             to="/resume"
-            className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 group"
+            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
           >
-            <span>{resume.has_analysis ? 'View Analysis' : 'Upload Resume'}</span>
-            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            <span>{resume.has_analysis ? 'View analysis' : 'Upload resume'}</span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
           </Link>
         </ModuleCard>
 
@@ -449,39 +434,39 @@ export function ProgressDashboardPage() {
         <ModuleCard
           icon={Map}
           title="Learning Roadmap"
-          badge={roadmap?.has_roadmap ? `${roadmap.completion_percentage}% Done` : 'Not Started'}
+          badge={roadmap?.has_roadmap ? `${roadmap.completion_percentage}%` : 'Not Started'}
           badgeColor={roadmap?.has_roadmap ? 'emerald' : 'slate'}
         >
           {roadmap?.has_roadmap ? (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Tasks Completed:</span>
-                <span className="font-semibold text-slate-800">
-                  {roadmap.completed_tasks_count} of {roadmap.total_tasks}
+                <span className="text-slate-400">Progress:</span>
+                <span className="font-medium text-slate-800">
+                  {roadmap.completed_tasks_count} / {roadmap.total_tasks} tasks
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full bg-brand-500 transition-all duration-300"
+                  className="h-full bg-slate-900 transition-all duration-300"
                   style={{ width: `${roadmap.completion_percentage}%` }}
                 />
               </div>
-              <div className="flex justify-between text-slate-600 pt-1">
-                <span className="text-slate-400">Target Role:</span>
-                <span className="font-medium text-slate-700 truncate max-w-[120px]">{roadmap.target_role}</span>
+              <div className="flex justify-between text-slate-600 pt-0.5">
+                <span className="text-slate-400">Target:</span>
+                <span className="text-slate-700 truncate max-w-[110px]">{roadmap.target_role}</span>
               </div>
             </div>
           ) : (
             <p className="text-xs text-slate-500">
-              Generate a weekly step-by-step action plan tailored to bridge your target role skill gaps.
+              Generate weekly milestone tasks tailored to fill your identified skill gaps.
             </p>
           )}
           <Link
             to="/roadmap"
-            className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 group"
+            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
           >
-            <span>{roadmap?.has_roadmap ? 'Continue Roadmap' : 'Generate Roadmap'}</span>
-            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            <span>{roadmap?.has_roadmap ? 'Continue roadmap' : 'Generate roadmap'}</span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
           </Link>
         </ModuleCard>
 
@@ -489,72 +474,72 @@ export function ProgressDashboardPage() {
         <ModuleCard
           icon={Video}
           title="Mock Interview"
-          badge={interview?.has_interview ? `Score ${interview.latest_score}` : 'Ready to Start'}
+          badge={interview?.has_interview ? `Score ${interview.latest_score}` : 'Available'}
           badgeColor={interview?.has_interview ? (interview.latest_score >= 75 ? 'emerald' : 'amber') : 'slate'}
         >
           {interview?.has_interview ? (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span className="text-slate-400">Latest Score:</span>
-                <span className={`font-semibold ${scoreTextColor(interview.latest_score)}`}>
+                <span className={`font-medium ${scoreTextColor(interview.latest_score)}`}>
                   {interview.latest_score}/100
                 </span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Total Practice:</span>
-                <span className="font-medium text-slate-700">{interview.total_interviews} sessions</span>
+                <span className="text-slate-400">Practice:</span>
+                <span className="text-slate-700">{interview.total_interviews} runs</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span className="text-slate-400">Role:</span>
-                <span className="font-medium text-slate-700 truncate max-w-[120px]">{interview.target_role || 'General'}</span>
+                <span className="text-slate-700 truncate max-w-[110px]">{interview.target_role || 'General'}</span>
               </div>
             </div>
           ) : (
             <p className="text-xs text-slate-500">
-              Practice real technical and behavioral questions evaluated by Qwen AI with instant feedback.
+              Practice interview questions with camera, voice dictation, and Qwen AI evaluation.
             </p>
           )}
           <Link
             to="/interview"
-            className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 group"
+            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
           >
-            <span>{interview?.has_interview ? 'Practice Again' : 'Start Simulation'}</span>
-            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            <span>{interview?.has_interview ? 'Practice again' : 'Start simulation'}</span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
           </Link>
         </ModuleCard>
       </section>
 
-      {/* ── 5. Skills Cloud & Actionable Next Steps ───────────────────────── */}
-      <section className="grid gap-6 lg:grid-cols-3">
-        {/* Skills Matrix */}
-        <div className="lg:col-span-2 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
-          <div className="flex items-center justify-between mb-4">
+      {/* ── 5. Skills & Next Actions ───────────────────────────────────── */}
+      <section className="grid gap-5 lg:grid-cols-3">
+        {/* Skills Inventory */}
+        <div className="lg:col-span-2 clean-card p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Your Skills Inventory</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Skills Inventory</h3>
               <p className="text-xs text-slate-500">
-                Deduplicated from your career profile and extracted resume data.
+                Aggregated from profile and extracted resume data.
               </p>
             </div>
-            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
               {allSkills.length} Total
             </span>
           </div>
 
           {allSkills.length > 0 ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
                 {allSkills.map((skill) => (
                   <span
                     key={skill.name}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
                       skill.source === 'resume'
-                        ? 'bg-brand-50 text-brand-700 border border-brand-200/70'
-                        : 'bg-slate-100 text-slate-700 border border-slate-200/70'
+                        ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                        : 'bg-white text-slate-700 border border-slate-200'
                     }`}
                   >
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        skill.source === 'resume' ? 'bg-brand-500' : 'bg-slate-400'
+                        skill.source === 'resume' ? 'bg-indigo-600' : 'bg-slate-400'
                       }`}
                     />
                     {skill.name}
@@ -562,59 +547,55 @@ export function ProgressDashboardPage() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-brand-500" />
-                  Verified via Resume AI
+              <div className="flex items-center gap-4 pt-2 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                  Verified via Resume
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-slate-400" />
-                  Self-Reported in Profile
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  Listed in Profile
                 </span>
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center">
-              <Sparkles className="mx-auto h-8 w-8 text-slate-400 mb-2" />
-              <p className="text-xs text-slate-500 font-medium">
-                No skills detected yet. Upload your resume or edit your profile to see your inventory.
+            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+              <p className="text-xs text-slate-500">
+                No skills recorded yet. Add skills in your profile or upload a resume.
               </p>
             </div>
           )}
         </div>
 
-        {/* Priority Next Steps */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card flex flex-col justify-between">
+        {/* Priority Actions */}
+        <div className="clean-card p-5 sm:p-6 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-slate-900">Recommended Steps</h3>
-              <span className="text-xs font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-900">Recommended Steps</h3>
+              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 Action Plan
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {next_steps.length > 0 ? (
                 next_steps.map((step, idx) => (
                   <Link
                     key={idx}
                     to={step.action}
-                    className="group block rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5 hover:bg-white hover:border-brand-300 hover:shadow-sm transition-all"
+                    className="block rounded-lg border border-slate-200 p-2.5 hover:bg-slate-50 hover:border-slate-300 transition"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5">
-                        <Zap className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
-                        <span className="text-xs font-semibold text-slate-800 group-hover:text-brand-700 transition-colors leading-snug">
-                          {step.label}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-slate-800 leading-snug">
+                        {step.label}
+                      </span>
                       <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        className={`shrink-0 rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase tracking-wider ${
                           step.priority === 'high'
                             ? 'bg-rose-50 text-rose-700 border border-rose-200'
                             : step.priority === 'medium'
                             ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
                         }`}
                       >
                         {step.priority}
@@ -623,20 +604,20 @@ export function ProgressDashboardPage() {
                   </Link>
                 ))
               ) : (
-                <div className="rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">
-                  You are all caught up! Keep practicing or consult your AI mentor.
+                <div className="rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500">
+                  All caught up! Ready for your next mock interview or mentor session.
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100">
+          <div className="mt-4 pt-3 border-t border-slate-100">
             <Link
               to="/mentor"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 transition"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Ask AI Mentor what to do next</span>
+              <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
+              <span>Ask AI Mentor for advice</span>
             </Link>
           </div>
         </div>
@@ -663,49 +644,49 @@ function JourneyStep({
   return (
     <Link
       to={to}
-      className={`group flex flex-col items-center justify-between rounded-2xl p-4 text-center transition-all ${
+      className={`group flex flex-col items-center justify-between rounded-lg p-3 text-center transition border ${
         status === 'completed'
-          ? 'bg-emerald-50/60 border border-emerald-200/80 hover:bg-emerald-50'
+          ? 'bg-emerald-50/40 border-emerald-200 hover:bg-emerald-50'
           : status === 'active'
-          ? 'bg-brand-50/80 border-2 border-brand-500 shadow-sm shadow-brand-500/10'
-          : 'bg-slate-50/60 border border-slate-200/60 hover:bg-slate-100/80'
+          ? 'bg-white border-slate-900 shadow-xs'
+          : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
       }`}
     >
-      <div className="flex items-center justify-between w-full mb-3">
+      <div className="flex items-center justify-between w-full mb-2">
         <span
-          className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+          className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
             status === 'completed'
               ? 'bg-emerald-600 text-white'
               : status === 'active'
-              ? 'bg-brand-600 text-white animate-pulse'
+              ? 'bg-slate-900 text-white'
               : 'bg-slate-200 text-slate-600'
           }`}
         >
           {step}
         </span>
         {status === 'completed' ? (
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
         ) : (
-          <span className="h-2 w-2 rounded-full bg-slate-300 group-hover:bg-brand-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
         )}
       </div>
 
       <Icon
-        className={`h-6 w-6 mb-2 ${
+        className={`h-5 w-5 mb-1.5 ${
           status === 'completed'
             ? 'text-emerald-700'
             : status === 'active'
-            ? 'text-brand-700'
+            ? 'text-slate-900'
             : 'text-slate-400'
         }`}
       />
 
       <span
-        className={`text-xs font-bold leading-tight ${
+        className={`text-xs font-medium ${
           status === 'completed'
-            ? 'text-emerald-900'
+            ? 'text-emerald-900 font-semibold'
             : status === 'active'
-            ? 'text-brand-900'
+            ? 'text-slate-900 font-semibold'
             : 'text-slate-600'
         }`}
       >
@@ -735,17 +716,17 @@ function ModuleCard({
   }
 
   return (
-    <div className="flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-card hover:shadow-card-hover transition-all duration-200">
+    <div className="clean-card p-4 sm:p-5 flex flex-col justify-between">
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
-            <Icon className="h-4 w-4 text-slate-700" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-100 text-slate-700">
+            <Icon className="h-3.5 w-3.5" />
           </div>
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${badgeClasses[badgeColor]}`}>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${badgeClasses[badgeColor]}`}>
             {badge}
           </span>
         </div>
-        <h3 className="text-sm font-bold text-slate-900 mb-3">{title}</h3>
+        <h3 className="text-xs font-semibold text-slate-900 mb-2">{title}</h3>
         {children}
       </div>
     </div>

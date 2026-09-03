@@ -4,7 +4,6 @@ import {
   Mic,
   MicOff,
   VideoOff,
-  Sparkles,
   Volume2,
   VolumeX,
   ArrowRight,
@@ -29,9 +28,9 @@ import type {
 /* ── helpers ────────────────────────────────────────────────────────────── */
 
 function scoreColor(score: number): string {
-  if (score >= 75) return 'text-emerald-600'
-  if (score >= 50) return 'text-amber-600'
-  return 'text-rose-600'
+  if (score >= 75) return 'text-emerald-700'
+  if (score >= 50) return 'text-amber-700'
+  return 'text-rose-700'
 }
 
 function scoreBg(score: number): string {
@@ -45,7 +44,7 @@ function categoryBadge(cat: string): { bg: string; color: string } {
     case 'technical':
       return { bg: 'bg-indigo-50 border-indigo-200', color: 'text-indigo-700' }
     case 'behavioral':
-      return { bg: 'bg-purple-50 border-purple-200', color: 'text-purple-700' }
+      return { bg: 'bg-slate-100 border-slate-200', color: 'text-slate-800' }
     case 'situational':
       return { bg: 'bg-teal-50 border-teal-200', color: 'text-teal-700' }
     default:
@@ -151,25 +150,42 @@ export function MockInterviewPage() {
             t.enabled = true
           })
         } else {
-          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          audioStream.getAudioTracks().forEach((t) => {
-            mediaStreamRef.current?.addTrack(t)
-          })
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getAudioTracks().forEach((t) => mediaStreamRef.current?.addTrack(t))
         }
       }
       setMicOn(true)
     } catch {
-      setError('Microphone access denied. Please verify your microphone permissions.')
+      setError('Microphone access denied. Please check permissions.')
     }
   }
 
-  /* ── speech recognition (Web Speech API) ──────────────────────────────── */
+  /* ── speech synthesis (question reader) ───────────────────────────────── */
+
+  function speakQuestion(text: string) {
+    if (!('speechSynthesis' in window)) return
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.rate = 0.95
+    utter.onend = () => setIsSpeaking(false)
+    utter.onerror = () => setIsSpeaking(false)
+    setIsSpeaking(true)
+    window.speechSynthesis.speak(utter)
+  }
+
+  /* ── speech recognition (voice answers) ──────────────────────────────── */
 
   function toggleSpeechRecognition(questionId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setError('Speech recognition is not supported in this browser. Please type your answer.')
+    const SpeechRecognitionAPI =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognitionAPI) {
+      setError('Speech recognition is not supported in this browser. Please type your response.')
       return
     }
 
@@ -181,64 +197,39 @@ export function MockInterviewPage() {
     }
 
     try {
-      const recognition = new SpeechRecognition()
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.lang = 'en-US'
+      const rec = new SpeechRecognitionAPI()
+      rec.continuous = true
+      rec.interimResults = true
+      rec.lang = 'en-US'
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
-        let transcript = ''
-        for (let i = 0; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript + ' '
+      rec.onresult = (event: any) => {
+        let final = ''
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            final += event.results[i][0].transcript + ' '
+          }
         }
-        setAnswers((prev) => ({
-          ...prev,
-          [questionId]: (prev[questionId] ? prev[questionId] + ' ' : '') + transcript.trim(),
-        }))
+        if (final) {
+          setAnswers((prev) => ({
+            ...prev,
+            [questionId]: (prev[questionId] ? prev[questionId] + ' ' : '') + final.trim(),
+          }))
+        }
       }
 
-      recognition.onerror = () => {
-        setIsListening(false)
-      }
+      rec.onerror = () => setIsListening(false)
+      rec.onend = () => setIsListening(false)
 
-      recognition.onend = () => {
-        setIsListening(false)
-      }
-
-      recognitionRef.current = recognition
-      recognition.start()
+      recognitionRef.current = rec
+      rec.start()
       setIsListening(true)
     } catch {
-      setError('Could not start speech recognition.')
+      setError('Could not initialize speech recognition.')
     }
   }
 
-  /* ── text to speech (AI reads question) ──────────────────────────────── */
-
-  function speakQuestion(text: string) {
-    if (!('speechSynthesis' in window)) {
-      setError('Text-to-speech is not supported in this browser.')
-      return
-    }
-
-    if (isSpeaking) {
-      window.speechSynthesis.cancel()
-      setIsSpeaking(false)
-      return
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.95
-    utterance.pitch = 1.0
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => setIsSpeaking(false)
-
-    setIsSpeaking(true)
-    window.speechSynthesis.speak(utterance)
-  }
-
-  /* ── import from profile / gap ───────────────────────────────────────── */
+  /* ── prefill from profile & skill gap ────────────────────────────────── */
 
   async function handleImportContext() {
     setIsImporting(true)
@@ -351,19 +342,15 @@ export function MockInterviewPage() {
   const isEvaluated = interview?.status === 'evaluated'
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-            <span>Alibaba Cloud Qwen AI Simulator</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-            AI Mock Interview Studio
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            Mock Interview Simulation
           </h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Simulate realistic technical and behavioral interviews with real-time video/voice support and deep AI scoring.
+          <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">
+            Practice role-specific technical and behavioral interviews with real-time video/voice support and AI feedback.
           </p>
         </div>
 
@@ -375,9 +362,9 @@ export function MockInterviewPage() {
               setCurrentIdx(0)
               setAnswers({})
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition self-start sm:self-auto"
+            className="btn-secondary self-start sm:self-auto text-xs py-1.5 px-3"
           >
-            <RefreshCw className="h-4 w-4 text-slate-500" />
+            <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
             <span>New Simulation</span>
           </button>
         )}
@@ -385,12 +372,12 @@ export function MockInterviewPage() {
 
       {/* ── Setup Lobby (when no active session) ─────────────────────────── */}
       {!interview && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+        <div className="clean-card p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Configure Interview Simulation</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Configure Simulation</h2>
               <p className="text-xs text-slate-500">
-                Choose your role, level, question format, and interview mode.
+                Choose target role, experience level, and preferred practice format.
               </p>
             </div>
 
@@ -398,23 +385,23 @@ export function MockInterviewPage() {
               type="button"
               onClick={handleImportContext}
               disabled={isImporting}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-50 border border-brand-200 px-3.5 py-2 text-xs font-bold text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50 transition shrink-0"
             >
-              <Zap className="h-3.5 w-3.5 text-brand-600" />
+              <Zap className="h-3.5 w-3.5 text-slate-600" />
               <span>{isImporting ? 'Importing…' : 'Import from Profile & Gap'}</span>
             </button>
           </div>
 
           {importNotice && (
-            <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs text-emerald-800">
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
               <span>{importNotice}</span>
             </div>
           )}
 
-          <div className="grid gap-6 md:grid-cols-2 text-xs">
+          <div className="grid gap-4 md:grid-cols-2 text-xs">
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Target Role <span className="text-rose-500">*</span>
               </label>
               <input
@@ -422,16 +409,16 @@ export function MockInterviewPage() {
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value)}
                 placeholder="e.g. Senior Frontend Engineer, DevOps Engineer"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">Experience Level</label>
+              <label className="block font-medium text-slate-700 mb-1">Experience Level</label>
               <select
                 value={experienceLevel}
                 onChange={(e) => setExperienceLevel(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
               >
                 <option value="student">Student / Intern</option>
                 <option value="fresh-graduate">Fresh Graduate (0-1 yrs)</option>
@@ -442,48 +429,61 @@ export function MockInterviewPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
+              <label className="block font-medium text-slate-700 mb-1">
                 Focus Skills / Topics (Optional)
               </label>
               <input
                 type="text"
                 value={focusSkills}
                 onChange={(e) => setFocusSkills(e.target.value)}
-                placeholder="e.g. React, System Design, REST APIs, Leadership"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition"
+                placeholder="e.g. React, System Design, SQL, Docker"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition"
               />
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between font-bold text-slate-700">
-                <span>Number of Questions</span>
-                <span className="text-brand-600">{questionCount} Questions</span>
-              </div>
+            <div>
+              <label className="block font-medium text-slate-700 mb-1">
+                Number of Questions ({questionCount})
+              </label>
               <input
                 type="range"
                 min={2}
                 max={5}
-                step={1}
                 value={questionCount}
                 onChange={(e) => setQuestionCount(Number(e.target.value))}
-                className="w-full accent-brand-600 cursor-pointer"
+                className="w-full accent-slate-900 cursor-pointer mt-2"
               />
-              <div className="flex justify-between text-[10px] text-slate-400">
-                <span>2 (Quick)</span>
-                <span>3 (Standard)</span>
-                <span>5 (Comprehensive)</span>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                <span>2 Questions (Fast)</span>
+                <span>3 Questions (Standard)</span>
+                <span>5 Questions (Comprehensive)</span>
               </div>
             </div>
           </div>
 
-          {/* Mode Selector */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <span className="block text-xs font-bold text-slate-700">Interview Mode</span>
-            <div className="grid grid-cols-3 gap-3">
+          {/* Mode Selection */}
+          <div className="pt-2">
+            <label className="block font-medium text-slate-700 mb-2 text-xs">Interview Mode</label>
+            <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { id: 'video' as const, label: 'Video Studio', desc: 'Camera + Audio + Speech-to-Text', icon: Video },
-                { id: 'voice' as const, label: 'Voice Mode', desc: 'Audio recording & Voice dictation', icon: Mic },
-                { id: 'text' as const, label: 'Text Focus', desc: 'Fast written response mode', icon: Sparkles },
+                {
+                  id: 'video',
+                  label: 'Video & Voice',
+                  desc: 'Webcam feed with voice dictation & speech playback',
+                  icon: Video,
+                },
+                {
+                  id: 'voice',
+                  label: 'Voice Only',
+                  desc: 'Audio speech playback with microphone voice answers',
+                  icon: Mic,
+                },
+                {
+                  id: 'text',
+                  label: 'Standard Text',
+                  desc: 'Classic typing format with structured AI scoring',
+                  icon: ArrowRight,
+                },
               ].map((m) => {
                 const Icon = m.icon
                 const isSelected = mode === m.id
@@ -491,16 +491,16 @@ export function MockInterviewPage() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setMode(m.id)}
-                    className={`flex flex-col items-start rounded-2xl border p-4 text-left transition ${
+                    onClick={() => setMode(m.id as InterviewMode)}
+                    className={`flex flex-col items-start rounded-lg border p-3 text-left transition ${
                       isSelected
-                        ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-500/20 shadow-xs'
+                        ? 'border-slate-900 bg-slate-50/60 shadow-xs'
                         : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
                   >
-                    <Icon className={`h-5 w-5 mb-2 ${isSelected ? 'text-brand-600' : 'text-slate-400'}`} />
-                    <span className="text-xs font-bold text-slate-900">{m.label}</span>
-                    <span className="text-[10px] text-slate-500 mt-0.5">{m.desc}</span>
+                    <Icon className={`h-4 w-4 mb-1.5 ${isSelected ? 'text-slate-900' : 'text-slate-400'}`} />
+                    <span className="text-xs font-semibold text-slate-900">{m.label}</span>
+                    <span className="text-[11px] text-slate-500 mt-0.5">{m.desc}</span>
                   </button>
                 )
               })}
@@ -508,7 +508,7 @@ export function MockInterviewPage() {
           </div>
 
           {error && (
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800">
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
               {error}
             </div>
           )}
@@ -518,17 +518,17 @@ export function MockInterviewPage() {
               type="button"
               onClick={handleStartInterview}
               disabled={isLoading || !targetRole.trim()}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary text-xs py-2 px-4"
             >
               {isLoading ? (
                 <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Preparing AI Questions…</span>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Preparing questions…</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4" />
-                  <span>Start Interview Simulation</span>
+                  <Video className="h-3.5 w-3.5" />
+                  <span>Start Interview</span>
                 </>
               )}
             </button>
@@ -538,35 +538,35 @@ export function MockInterviewPage() {
 
       {/* ── Active Studio / Evaluation Screen ─────────────────────────────── */}
       {interview && (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-6 animate-fade-in">
           {/* Top Session Progress Bar */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="clean-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 Session: {interview.target_role}
               </span>
-              <div className="flex items-center gap-3 mt-1">
-                <h2 className="text-lg font-bold text-slate-900">
+              <div className="flex items-center gap-2 mt-0.5">
+                <h2 className="text-sm font-semibold text-slate-900">
                   {isEvaluated ? 'Evaluation Scorecard' : `Question ${currentIdx + 1} of ${questions.length}`}
                 </h2>
-                <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[10px] font-bold text-brand-700 border border-brand-200">
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 border border-slate-200">
                   {interview.experience_level}
                 </span>
               </div>
             </div>
 
             {!isEvaluated && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {questions.map((q, idx) => (
                   <button
                     key={q.id}
                     type="button"
                     onClick={() => setCurrentIdx(idx)}
-                    className={`h-8 w-8 rounded-xl font-bold text-xs transition ${
+                    className={`h-7 w-7 rounded-md font-semibold text-xs transition ${
                       currentIdx === idx
-                        ? 'bg-brand-600 text-white shadow-xs'
+                        ? 'bg-slate-900 text-white shadow-xs'
                         : answers[q.id]?.trim()
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -579,10 +579,10 @@ export function MockInterviewPage() {
 
           {/* ── Active Question & Stage View ──────────────────────────────── */}
           {!isEvaluated && currentQ && (
-            <div className="grid gap-8 lg:grid-cols-12 items-start">
+            <div className="grid gap-6 lg:grid-cols-12 items-start">
               {/* Left Media Stage */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-slate-950 aspect-video flex items-center justify-center shadow-card">
+              <div className="lg:col-span-5 space-y-3">
+                <div className="relative overflow-hidden rounded-xl border border-slate-900 bg-slate-950 aspect-video flex items-center justify-center">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -592,20 +592,20 @@ export function MockInterviewPage() {
                   />
 
                   {!cameraOn && (
-                    <div className="flex flex-col items-center justify-center text-slate-400 space-y-2 p-6 text-center">
-                      <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center">
-                        <VideoOff className="h-6 w-6 text-slate-400" />
+                    <div className="flex flex-col items-center justify-center text-slate-400 space-y-1.5 p-4 text-center">
+                      <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center">
+                        <VideoOff className="h-5 w-5 text-slate-400" />
                       </div>
-                      <p className="text-xs font-semibold text-white">Camera is currently off</p>
+                      <p className="text-xs font-medium text-white">Camera off</p>
                       <p className="text-[10px] text-slate-400">
-                        Enable camera for an authentic video interview experience.
+                        Enable camera for simulated video interview.
                       </p>
                     </div>
                   )}
 
                   {/* Live Recording Badge */}
                   {cameraOn && (
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-rose-600/90 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                       <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                       <span>LIVE</span>
                     </div>
@@ -613,41 +613,41 @@ export function MockInterviewPage() {
                 </div>
 
                 {/* Media Control Toolbar */}
-                <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+                <div className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-xs">
                   <button
                     type="button"
                     onClick={toggleCamera}
-                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
                       cameraOn
                         ? 'bg-rose-50 text-rose-700 border border-rose-200'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    {cameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                    {cameraOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
                     <span>{cameraOn ? 'Stop Camera' : 'Start Camera'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={toggleMic}
-                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
                       micOn
                         ? 'bg-rose-50 text-rose-700 border border-rose-200'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                    {micOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
                     <span>{micOn ? 'Mute Mic' : 'Unmute Mic'}</span>
                   </button>
                 </div>
               </div>
 
               {/* Right Active Question & Answer Box */}
-              <div className="lg:col-span-7 space-y-6">
-                <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-5">
+              <div className="lg:col-span-7 space-y-4">
+                <div className="clean-card p-5 sm:p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider border ${
                         categoryBadge(currentQ.category).bg
                       } ${categoryBadge(currentQ.category).color}`}
                     >
@@ -657,9 +657,9 @@ export function MockInterviewPage() {
                     <button
                       type="button"
                       onClick={() => speakQuestion(currentQ.question)}
-                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
                         isSpeaking
-                          ? 'bg-brand-100 text-brand-800'
+                          ? 'bg-indigo-100 text-indigo-800'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -668,33 +668,33 @@ export function MockInterviewPage() {
                     </button>
                   </div>
 
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
                     {currentQ.question}
                   </h3>
 
                   {/* Collapsible Hints */}
                   {currentQ.hint && (
-                    <div className="rounded-2xl border border-brand-100 bg-brand-50/40 p-4">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                       <button
                         type="button"
                         onClick={() =>
                           setExpandedHint(expandedHint === currentQ.id ? null : currentQ.id)
                         }
-                        className="flex items-center justify-between w-full text-left text-xs font-bold text-brand-900"
+                        className="flex items-center justify-between w-full text-left text-xs font-semibold text-slate-800"
                       >
                         <span className="flex items-center gap-1.5">
-                          <HelpCircle className="h-4 w-4 text-brand-600" />
+                          <HelpCircle className="h-3.5 w-3.5 text-slate-500" />
                           <span>AI Answer Guidance & Hint</span>
                         </span>
                         {expandedHint === currentQ.id ? (
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="h-3.5 w-3.5" />
                         ) : (
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-3.5 w-3.5" />
                         )}
                       </button>
 
                       {expandedHint === currentQ.id && (
-                        <p className="mt-3 pt-2 border-t border-brand-100 text-xs text-brand-950 leading-relaxed">
+                        <p className="mt-2 pt-2 border-t border-slate-200 text-xs text-slate-600 leading-relaxed">
                           {currentQ.hint}
                         </p>
                       )}
@@ -702,20 +702,20 @@ export function MockInterviewPage() {
                   )}
 
                   {/* Answer Textarea */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-medium text-slate-700">
                       <span>Your Response:</span>
                       <button
                         type="button"
                         onClick={() => toggleSpeechRecognition(currentQ.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition ${
                           isListening
                             ? 'bg-rose-100 text-rose-700 animate-pulse'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        <Mic className="h-3.5 w-3.5" />
-                        <span>{isListening ? 'Listening… (Click to stop)' : 'Dictate with Voice'}</span>
+                        <Mic className="h-3 w-3" />
+                        <span>{isListening ? 'Listening…' : 'Dictate with Voice'}</span>
                       </button>
                     </div>
 
@@ -725,25 +725,25 @@ export function MockInterviewPage() {
                       onChange={(e) =>
                         setAnswers((prev) => ({ ...prev, [currentQ.id]: e.target.value }))
                       }
-                      placeholder="Type or dictate your response to the question..."
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none leading-relaxed"
+                      placeholder="Type or dictate your response..."
+                      className="w-full rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none leading-relaxed"
                     />
 
-                    <div className="flex justify-between text-[11px] text-slate-400">
+                    <div className="flex justify-between text-[10px] text-slate-400">
                       <span>
                         Words: {(answers[currentQ.id] || '').trim().split(/\s+/).filter(Boolean).length}
                       </span>
-                      <span>Qwen will evaluate structure, relevance, and depth</span>
+                      <span>Evaluated for structure, depth, and relevance</span>
                     </div>
                   </div>
 
-                  {/* Navigation / Next Question Action */}
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  {/* Navigation Actions */}
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                     <button
                       type="button"
                       disabled={currentIdx === 0}
                       onClick={() => setCurrentIdx((prev) => Math.max(0, prev - 1))}
-                      className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                      className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-40"
                     >
                       Previous
                     </button>
@@ -752,27 +752,27 @@ export function MockInterviewPage() {
                       <button
                         type="button"
                         onClick={() => setCurrentIdx((prev) => Math.min(questions.length - 1, prev + 1))}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
+                        className="btn-primary text-xs py-1.5 px-4"
                       >
                         <span>Next Question</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3 w-3" />
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={handleSubmitInterview}
                         disabled={isSubmitting}
-                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-brand-600/20 hover:brightness-110 active:scale-98 transition disabled:opacity-50"
+                        className="btn-primary text-xs py-1.5 px-4"
                       >
                         {isSubmitting ? (
                           <>
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                            <span>Evaluating Responses…</span>
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                            <span>Evaluating…</span>
                           </>
                         ) : (
                           <>
-                            <Sparkles className="h-4 w-4" />
-                            <span>Submit for AI Evaluation</span>
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>Submit for Evaluation</span>
                           </>
                         )}
                       </button>
@@ -785,22 +785,22 @@ export function MockInterviewPage() {
 
           {/* ── Evaluated Scorecard View ───────────────────────────────────── */}
           {isEvaluated && interview.feedback && (
-            <div className="space-y-8 animate-fade-in">
+            <div className="space-y-5 animate-fade-in">
               {/* Scorecard Hero */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="clean-card p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Final Interview Assessment
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Interview Assessment
                   </span>
-                  <h2 className="text-2xl font-bold text-slate-900 mt-1">{interview.target_role}</h2>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <h2 className="text-base font-bold text-slate-900 mt-0.5">{interview.target_role}</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Evaluated across clarity, relevance, and technical precision using Qwen-Max.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3.5">
                   <div
-                    className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border-4 font-black text-2xl shadow-sm ${scoreBg(
+                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 font-bold text-xl shadow-xs ${scoreBg(
                       interview.feedback.overall_score
                     )}`}
                   >
@@ -809,10 +809,10 @@ export function MockInterviewPage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                       Readiness Status
                     </span>
-                    <p className="text-base font-bold text-slate-900">
+                    <p className="text-sm font-bold text-slate-900">
                       {interview.feedback.overall_score >= 75
                         ? 'Interview Ready'
                         : interview.feedback.overall_score >= 50
@@ -825,8 +825,10 @@ export function MockInterviewPage() {
 
               {/* Feedback Summary Callout */}
               {interview.feedback.summary && (
-                <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card">
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">Overall Interview Feedback</h3>
+                <div className="clean-card p-5 space-y-1.5">
+                  <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                    Overall Interview Feedback
+                  </h3>
                   <p className="text-xs leading-relaxed text-slate-700">
                     {interview.feedback.summary}
                   </p>
@@ -835,15 +837,14 @@ export function MockInterviewPage() {
 
               {/* Recommended Actions */}
               {interview.feedback.recommended_actions && interview.feedback.recommended_actions.length > 0 && (
-                <div className="rounded-3xl border border-brand-200/80 bg-brand-50/20 p-6 shadow-card">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-brand-900 mb-3 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-brand-600" />
-                    <span>Recommended Next Actions</span>
+                <div className="clean-card p-5 space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                    Recommended Next Actions
                   </h3>
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {interview.feedback.recommended_actions.map((act, i) => (
                       <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
-                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" />
                         <span>{act}</span>
                       </li>
                     ))}
@@ -852,8 +853,8 @@ export function MockInterviewPage() {
               )}
 
               {/* Question-by-Question Detailed Evaluations */}
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-slate-900">Question-by-Question Analysis</h3>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900">Question-by-Question Breakdown</h3>
 
                 {interview.feedback.evaluations.map((qEval, idx) => {
                   const matchingQ = interview.questions.find((q) => q.id === qEval.question_id)
@@ -861,30 +862,28 @@ export function MockInterviewPage() {
                   return (
                     <div
                       key={qEval.question_id}
-                      className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card space-y-4"
+                      className="clean-card p-5 space-y-3"
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 font-bold text-xs text-slate-800">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 font-semibold text-xs text-slate-800 border border-slate-200">
                             {idx + 1}
                           </span>
-                          <h4 className="text-sm font-bold text-slate-900">
+                          <h4 className="text-xs font-semibold text-slate-900">
                             {matchingQ?.question || `Question ${idx + 1}`}
                           </h4>
                         </div>
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
-                          <span className={`text-sm font-extrabold ${scoreColor(qEval.score)}`}>
-                            {qEval.score}/100
-                          </span>
-                        </div>
+                        <span className={`text-xs font-bold ${scoreColor(qEval.score)} self-start sm:self-auto`}>
+                          Score: {qEval.score}/100
+                        </span>
                       </div>
 
                       {/* Strengths & Improvements */}
                       <div className="grid gap-3 sm:grid-cols-2 text-xs">
                         {qEval.strengths.length > 0 && (
-                          <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl space-y-1">
-                            <span className="font-bold text-emerald-900 text-[11px] uppercase">Strengths</span>
-                            <ul className="space-y-1 text-slate-700">
+                          <div className="bg-emerald-50/40 border border-emerald-200/80 p-3 rounded-lg space-y-1">
+                            <span className="font-semibold text-emerald-900 text-[10px] uppercase tracking-wider">Strengths</span>
+                            <ul className="space-y-1 text-slate-700 text-[11px]">
                               {qEval.strengths.map((s, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
                                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1 shrink-0" />
@@ -896,9 +895,9 @@ export function MockInterviewPage() {
                         )}
 
                         {qEval.improvements.length > 0 && (
-                          <div className="bg-rose-50/50 border border-rose-100 p-3 rounded-2xl space-y-1">
-                            <span className="font-bold text-rose-900 text-[11px] uppercase">Improvements</span>
-                            <ul className="space-y-1 text-slate-700">
+                          <div className="bg-rose-50/40 border border-rose-200/80 p-3 rounded-lg space-y-1">
+                            <span className="font-semibold text-rose-900 text-[10px] uppercase tracking-wider">Areas to Improve</span>
+                            <ul className="space-y-1 text-slate-700 text-[11px]">
                               {qEval.improvements.map((imp, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
                                   <span className="h-1.5 w-1.5 rounded-full bg-rose-500 mt-1 shrink-0" />
@@ -911,8 +910,8 @@ export function MockInterviewPage() {
                       </div>
 
                       {qEval.ideal_answer && (
-                        <div className="text-[11px] text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
-                          <span className="font-bold text-slate-800">Ideal Answer Outline: </span>
+                        <div className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-0.5">
+                          <span className="font-semibold text-slate-800">Ideal Answer Outline: </span>
                           <p className="text-slate-600 leading-relaxed">{qEval.ideal_answer}</p>
                         </div>
                       )}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Sparkles,
   Send,
   User,
   Bot,
@@ -147,23 +146,19 @@ export function CareerMentorPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-4xl flex-col px-4 sm:px-6 lg:px-8 pt-8 pb-4">
+    <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] w-full max-w-4xl flex-col px-4 sm:px-6 lg:px-8 py-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200/80">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 border border-brand-200/60 mb-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-            <span>Alibaba Cloud Qwen-Max Powered</span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">AI Career Mentor</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">AI Career Mentor</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
             Ask career strategy questions, request portfolio feedback, and explore actionable learning steps.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 self-start sm:self-auto">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          <span className="font-semibold">Context Grounded</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 self-start sm:self-auto">
+          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+          <span className="font-medium text-[11px]">Context Grounded</span>
         </div>
       </header>
 
@@ -171,7 +166,7 @@ export function CareerMentorPage() {
       {contextInfo && <ContextBanner info={contextInfo} />}
 
       {/* ── Conversation Thread ─────────────────────────────────────────── */}
-      <div className="mt-6 flex-1 space-y-6 pb-6">
+      <div className="mt-4 flex-1 space-y-4 pb-6">
         {isLoadingHistory ? (
           <ConversationSkeleton />
         ) : messages.length === 0 ? (
@@ -190,14 +185,14 @@ export function CareerMentorPage() {
       </div>
 
       {/* ── Sticky Composer Box ──────────────────────────────────────────── */}
-      <div className="sticky bottom-0 z-20 bg-slate-50/95 pb-4 pt-2 backdrop-blur-md">
+      <div className="sticky bottom-0 z-20 bg-slate-50/95 pb-4 pt-2">
         {historyError && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
-            <span>Could not restore your chat history. {historyError}</span>
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+            <span>Could not restore chat history: {historyError}</span>
             <button
               type="button"
               onClick={() => void loadHistory()}
-              className="font-bold underline text-rose-900"
+              className="font-medium underline text-rose-900"
             >
               Retry
             </button>
@@ -205,7 +200,7 @@ export function CareerMentorPage() {
         )}
 
         {sendError && (
-          <div className="mb-3 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-medium text-rose-800">
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
             <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
             <span>{sendError}</span>
           </div>
@@ -213,7 +208,7 @@ export function CareerMentorPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-3xl border border-slate-300/90 bg-white shadow-card focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all"
+          className="clean-card p-0 focus-within:border-slate-400 overflow-hidden transition"
         >
           <label htmlFor="mentor-message" className="sr-only">
             Message your Career Mentor
@@ -227,9 +222,9 @@ export function CareerMentorPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask your mentor anything about your career path, resume, or skills..."
-            className="block w-full resize-none rounded-t-3xl border-0 px-5 pt-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
+            className="block w-full resize-none border-0 px-4 pt-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
           />
-          <div className="flex items-center justify-between gap-3 rounded-b-3xl border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
+          <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-3.5 py-2 bg-slate-50/70">
             <span className="hidden sm:inline text-[11px] text-slate-400">
               Press <kbd className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">Enter</kbd> to send · <kbd className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">Shift+Enter</kbd> for new line
             </span>
@@ -240,7 +235,7 @@ export function CareerMentorPage() {
             <button
               type="submit"
               disabled={isSending || input.trim().length === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="btn-primary text-xs py-1.5 px-3"
             >
               {isSending ? (
                 <>
@@ -250,7 +245,7 @@ export function CareerMentorPage() {
               ) : (
                 <>
                   <span>Send</span>
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-3 w-3" />
                 </>
               )}
             </button>
@@ -266,26 +261,26 @@ export function CareerMentorPage() {
 function ContextBanner({ info }: { info: MentorContextInfo }) {
   if (info.hasProfile && info.hasResume) {
     return (
-      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-900">
-        <Sparkles className="h-4 w-4 text-brand-600 shrink-0" />
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-700">
+        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
         <span>
-          Grounded with your <strong className="font-semibold">Career Profile</strong> and <strong className="font-semibold">Resume Analysis</strong> for hyper-personalized advice.
+          Personalized using your <strong className="font-semibold text-slate-900">Career Profile</strong> and <strong className="font-semibold text-slate-900">Resume Analysis</strong>.
         </span>
       </div>
     )
   }
 
   return (
-    <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900">
+    <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-900">
       <div className="flex items-center gap-2">
-        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+        <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
         <span>
           Add {!info.hasProfile && 'your Career Profile'}
           {!info.hasProfile && !info.hasResume && ' and '}
           {!info.hasResume && 'a Resume Analysis'} for tailored recommendations.
         </span>
       </div>
-      <div className="flex items-center gap-3 font-semibold">
+      <div className="flex items-center gap-2 font-medium">
         {!info.hasProfile && (
           <Link to="/profile" className="underline hover:text-amber-950">
             Profile →
@@ -308,32 +303,32 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   const time = formatTime(message.created_at)
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-700 to-indigo-600 text-white shadow-xs">
-          <Bot className="h-4 w-4" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white shadow-xs mt-0.5">
+          <Bot className="h-3.5 w-3.5" />
         </div>
       )}
 
       <div
-        className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-4 sm:p-5 shadow-xs ${
+        className={`max-w-[85%] sm:max-w-[75%] rounded-xl p-3.5 sm:p-4 text-xs ${
           isUser
-            ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-br-xs'
-            : 'bg-white border border-slate-200/80 text-slate-800 rounded-bl-xs'
+            ? 'bg-slate-900 text-white rounded-br-xs'
+            : 'clean-card text-slate-800 rounded-bl-xs'
         }`}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         ) : (
-          <div className="text-sm leading-relaxed prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5">
+          <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900 prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5">
             <MessageContent content={message.content} />
           </div>
         )}
 
         {time && (
           <p
-            className={`mt-2 text-[10px] ${
-              isUser ? 'text-brand-200 text-right' : 'text-slate-400'
+            className={`mt-1.5 text-[10px] ${
+              isUser ? 'text-slate-400 text-right' : 'text-slate-400'
             }`}
           >
             {time}
@@ -342,8 +337,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       </div>
 
       {isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-700 shadow-xs">
-          <User className="h-4 w-4" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shadow-xs mt-0.5">
+          <User className="h-3.5 w-3.5" />
         </div>
       )}
     </div>
@@ -354,17 +349,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function ThinkingIndicator() {
   return (
-    <div className="flex gap-3 items-start animate-fade-in">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white shadow-xs">
-        <Bot className="h-4 w-4" />
+    <div className="flex gap-2.5 items-start animate-fade-in">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white shadow-xs">
+        <Bot className="h-3.5 w-3.5" />
       </div>
-      <div className="rounded-3xl rounded-bl-xs border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-2">
+      <div className="rounded-xl rounded-bl-xs border border-slate-200 bg-white p-3 shadow-xs flex items-center gap-2">
         <span className="flex space-x-1">
-          <span className="h-2 w-2 rounded-full bg-brand-400 animate-bounce" />
-          <span className="h-2 w-2 rounded-full bg-brand-500 animate-bounce [animation-delay:0.2s]" />
-          <span className="h-2 w-2 rounded-full bg-brand-600 animate-bounce [animation-delay:0.4s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-bounce [animation-delay:0.2s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-bounce [animation-delay:0.4s]" />
         </span>
-        <span className="text-xs text-slate-500 font-medium">Qwen is thinking…</span>
+        <span className="text-[11px] text-slate-500 font-medium">Qwen is thinking…</span>
       </div>
     </div>
   )
@@ -380,21 +375,21 @@ function EmptyConversationState({
   onPromptClick: (p: string) => void
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-10 text-center space-y-6">
-      <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white shadow-md shadow-brand-500/20">
-        <Compass className="h-8 w-8" />
+    <div className="flex flex-col items-center justify-center py-8 text-center space-y-5">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+        <Compass className="h-6 w-6" />
       </div>
 
-      <div className="space-y-1 max-w-md">
-        <h3 className="text-lg font-bold text-slate-900">Your AI Career Mentor is Ready</h3>
-        <p className="text-xs text-slate-500">
-          Get real-time insights tailored to your target roles, resume improvements, and career goals.
+      <div className="space-y-1 max-w-sm">
+        <h3 className="text-base font-bold text-slate-900">Career Strategy Assistant</h3>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Ask questions about roles, interview preparation, portfolio strategy, or skill improvements.
         </p>
       </div>
 
       <div className="w-full max-w-lg space-y-2 pt-2">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-          Suggested Topics
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          Suggested Conversation Starters
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {prompts.map((prompt, idx) => (
@@ -403,10 +398,10 @@ function EmptyConversationState({
               type="button"
               disabled={disabled}
               onClick={() => onPromptClick(prompt)}
-              className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left text-xs font-semibold text-slate-700 shadow-xs hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-900 transition group disabled:opacity-50"
+              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition group disabled:opacity-50"
             >
               <span>{prompt}</span>
-              <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-600 shrink-0 ml-2" />
+              <ArrowRight className="h-3 w-3 text-slate-400 group-hover:text-slate-700 shrink-0 ml-1.5" />
             </button>
           ))}
         </div>
@@ -417,10 +412,10 @@ function EmptyConversationState({
 
 function ConversationSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-16 w-2/3 rounded-3xl bg-slate-200/70" />
-      <div className="h-20 w-3/4 rounded-3xl bg-slate-200/70 ml-auto" />
-      <div className="h-28 w-4/5 rounded-3xl bg-slate-200/70" />
+    <div className="space-y-3 animate-pulse">
+      <div className="h-12 w-2/3 rounded-xl bg-slate-200/70" />
+      <div className="h-16 w-3/4 rounded-xl bg-slate-200/70 ml-auto" />
+      <div className="h-20 w-4/5 rounded-xl bg-slate-200/70" />
     </div>
   )
 }

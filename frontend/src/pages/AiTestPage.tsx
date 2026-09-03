@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  Terminal,
   Send,
   RefreshCw,
   AlertCircle,
@@ -36,27 +35,23 @@ export function AiTestPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div>
-        <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200 mb-2">
-          <Terminal className="h-3.5 w-3.5 text-slate-600" />
-          <span>Alibaba Cloud Connectivity Console</span>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          Qwen AI Diagnostic Test
+    <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <div className="pb-2 border-b border-slate-200">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900">
+          Qwen AI Diagnostic Console
         </h1>
-        <p className="mt-1 text-xs text-slate-500">
-          Direct test console to verify that the Alibaba Cloud Model Studio API key, FastAPI proxy layer, and Qwen LLM are responding with low latency.
+        <p className="mt-0.5 text-xs text-slate-500">
+          Direct test console to verify Alibaba Cloud Model Studio API connectivity and Qwen LLM response latency.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-card space-y-4 text-xs"
+        className="clean-card p-5 space-y-3 text-xs"
       >
         <div className="flex items-center justify-between">
-          <label className="font-bold text-slate-700">Test Prompt</label>
-          <span className="text-[11px] text-slate-400">Endpoint: /api/ai/test</span>
+          <label className="font-semibold text-slate-700">Test Prompt</label>
+          <span className="text-[11px] text-slate-400 font-mono">POST /api/ai/test</span>
         </div>
 
         <textarea
@@ -64,15 +59,15 @@ export function AiTestPage() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={3}
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs text-slate-900 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition resize-none"
+          className="w-full rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition resize-none"
           placeholder="e.g. Hello Qwen! Provide a 1-sentence career advice quote for a junior engineer."
         />
 
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end pt-1">
           <button
             type="submit"
             disabled={isSending || message.trim().length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 active:scale-98 transition disabled:opacity-50"
+            className="btn-primary text-xs py-2 px-4"
           >
             {isSending ? (
               <>
@@ -82,7 +77,7 @@ export function AiTestPage() {
             ) : (
               <>
                 <span>Send Diagnostic</span>
-                <Send className="h-3.5 w-3.5" />
+                <Send className="h-3 w-3" />
               </>
             )}
           </button>
@@ -90,26 +85,26 @@ export function AiTestPage() {
       </form>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs text-rose-800">
+        <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
           <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {response !== null && (
-        <div className="rounded-3xl border border-brand-200 bg-brand-50/40 p-6 shadow-card space-y-3 animate-fade-in">
-          <div className="flex items-center justify-between pb-3 border-b border-brand-100">
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-800">
-              <Cpu className="h-4 w-4 text-brand-600" />
-              <span>Qwen Model Response</span>
+        <div className="clean-card p-5 space-y-3 animate-fade-in">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+              <Cpu className="h-4 w-4 text-slate-700" />
+              <span>Model Output</span>
             </span>
             {model && (
-              <span className="rounded-full bg-white border border-brand-200 px-2.5 py-0.5 text-[10px] font-mono font-bold text-brand-700">
+              <span className="rounded bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-mono font-medium text-slate-700">
                 {model}
               </span>
             )}
           </div>
-          <p className="whitespace-pre-wrap text-xs text-slate-800 leading-relaxed font-mono bg-white p-4 rounded-2xl border border-brand-100">
+          <p className="whitespace-pre-wrap text-xs text-slate-800 leading-relaxed font-mono bg-slate-50 p-3 rounded-lg border border-slate-200">
             {response}
           </p>
         </div>
