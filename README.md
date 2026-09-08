@@ -1,83 +1,186 @@
 # CareerPilot AI
 
-> Your Personal AI Career Mentor & Interview Coach
+> **Your Personal AI Career Mentor & Interview Coach**
 
-CareerPilot AI is an AI-powered career-readiness platform that helps students understand where they stand, close their skill gaps, and prepare for the jobs they want. Built for the **Alibaba Cloud AI Hackathon Pakistan 2026**.
+AI-powered career-readiness platform that helps students assess their resume, close skill gaps, and prepare for interviews — all in one guided journey.
 
-## Problem
+Built for the **Alibaba Cloud AI Hackathon Pakistan 2026** · Theme: *AI for Pakistan's Future*
 
-Students often don't know whether their resume is job-ready, which skills they're missing, what to learn next, or how to prepare for interviews. No single tool connects all of these into one guided experience.
+---
 
-## Solution
+## Overview
 
-CareerPilot combines six AI-driven tools into one guided career journey:
+CareerPilot AI connects six AI-driven modules into a single guided career experience. Data flows automatically from resume analysis through skill gap identification, personalized learning roadmaps, conversational mentoring, and mock interview practice — with a progress dashboard aggregating results across all modules.
 
-1. **AI Resume Analyzer** — upload a PDF resume, get a readiness score (0-100) and actionable feedback
-2. **Skill Gap Analysis** — compare your skills against your target role, see match percentage
-3. **Personalized Roadmap** — a time-boxed learning plan to close your gaps
-4. **AI Career Mentor** — conversational guidance grounded in your profile, resume, and progress
-5. **AI Mock Interview** — role-specific practice questions with scored feedback
-6. **Progress Dashboard** — see your readiness score, milestones, and next steps across all modules
+**Target users:** university students, fresh graduates, and early-career developers preparing for internships or full-time roles.
 
-Modules are connected: data flows automatically from Resume → Skill Gap → Roadmap → Mentor → Interview, with cross-module navigation guiding users through the journey.
+## Problem Statement
 
-## Architecture
+Students entering the job market face a common set of challenges:
+
+- They don't know whether their resume is job-ready
+- They can't identify which skills they're missing for a target role
+- They lack a structured learning plan to close those gaps
+- They have no realistic way to practice interviews with feedback
+- No single tool connects all of these into one guided experience
+
+CareerPilot AI addresses each of these with purpose-built AI modules that work together as a unified career journey.
+
+## Key Features
+
+| # | Module | Description |
+|---|--------|-------------|
+| 1 | **AI Resume Analyzer** | Upload a PDF resume, receive a job-readiness score (0–100) and actionable feedback |
+| 2 | **Skill Gap Analysis** | Compare your extracted skills against a target role and see your match percentage |
+| 3 | **Personalized Roadmap** | Get a time-boxed learning plan generated from your identified skill gaps |
+| 4 | **AI Career Mentor** | Conversational career guidance grounded in your profile, resume, and progress |
+| 5 | **AI Mock Interview** | Role-specific practice questions with scored, structured feedback |
+| 6 | **Progress Dashboard** | Aggregated readiness scores, milestones, and next steps across all modules |
+
+**Cross-module data flow:**
 
 ```
-Frontend (React 19 + TS + Vite + Tailwind)
-        ↓  HTTP + JWT
-Backend (Python + FastAPI) ── 10 routers, 27 endpoints
-        ↓              ↓
-   MongoDB          Alibaba Cloud Model Studio / Qwen
-   (Motor async)    (backend-only, keys never reach frontend)
+Register → Login → Profile → Resume → Skill Gap → Roadmap → Mentor → Interview → Dashboard
 ```
 
-- **Single backend**: Python + FastAPI — no Node/Express layer
-- **AI isolation**: Qwen is accessed only through `app/services/ai`; keys never reach the frontend
-- **Validation pipeline**: AI outputs go through Generation → Parsing → Schema Validation → Business Validation before being stored or displayed
-- **Offline mode**: All modules work without MongoDB (in-memory fallback) for hackathon demo reliability
+Modules are connected with auto-fill and contextual navigation — resume analysis feeds into skill gap analysis, profile data auto-fills target roles, and skill gap results link directly to the roadmap generator.
 
-## Tech Stack
+## Technology Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 3, React Router 7, Axios |
-| Backend | Python 3.13, FastAPI 0.116, Uvicorn, Pydantic 2 |
-| Database | MongoDB (Motor 3.7 async driver) with offline fallback |
-| Auth | JWT (python-jose, HS256) + bcrypt password hashing |
-| AI | Alibaba Cloud Model Studio / Qwen (qwen-plus via OpenAI-compatible API) |
-| Testing | pytest (162 tests), oxlint, TypeScript strict mode |
+|-------|------------|
+| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS 3, React Router 7, Axios, Framer Motion, Lucide Icons |
+| **Backend** | Python, FastAPI 0.141, Uvicorn, Pydantic 2 |
+| **Database** | MongoDB via Motor 3.7 async driver (with offline-mode fallback) |
+| **Authentication** | JWT (python-jose, HS256) + bcrypt password hashing |
+| **AI Engine** | Alibaba Cloud Model Studio / Qwen (`qwen-plus` via OpenAI-compatible API) |
+| **PDF Processing** | PyMuPDF |
+| **Testing** | pytest (171 tests), oxlint, TypeScript strict mode |
+| **Deployment** | Vercel (frontend) · Render (backend) · MongoDB Atlas (database) |
 
-## Getting Started
+## System Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                  Frontend (Vercel)                       │
+│         React 19 + TypeScript + Vite + Tailwind          │
+└────────────────────────┬─────────────────────────────────┘
+                         │  HTTP / REST + JWT Bearer
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│                  Backend (Render)                        │
+│                   Python + FastAPI                       │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │  10 Routers · Pydantic Schemas · Service Layer  │    │
+│  └────────────────────────┬────────────────────────┘    │
+└───────────────────────────┼──────────────────────────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+┌──────────────────────┐   ┌──────────────────────────────┐
+│   MongoDB Atlas      │   │  Alibaba Cloud Model Studio  │
+│   (Motor async)      │   │  Qwen AI (qwen-plus)        │
+└──────────────────────┘   └──────────────────────────────┘
+```
+
+> Place a detailed architecture diagram at `docs/architecture.png` to replace this text diagram. See the [Architecture Diagram](#architecture-diagram) section below for details.
+
+**Architecture principles:**
+
+- **Single backend** — Python + FastAPI only; no Node/Express layer
+- **AI isolation** — Qwen is accessed exclusively through `app/services/ai`; API keys never reach the frontend
+- **Validation pipeline** — AI outputs go through Generation → Parsing → Schema Validation → Business Validation before being stored or displayed
+- **Offline mode** — all modules work without MongoDB (in-memory fallback) for demo reliability
+
+## Application Workflow
+
+```
+User registers and logs in
+        │
+        ▼
+Completes career profile (target role, current skills, experience)
+        │
+        ▼
+Uploads resume (PDF) → AI extracts sections and scores readiness
+        │
+        ▼
+Skill Gap Analysis → compares extracted skills vs. target role requirements
+        │
+        ▼
+Roadmap Generator → creates personalized time-boxed learning plan
+        │
+        ├──► AI Career Mentor → context-aware guidance using profile + progress data
+        │
+        ├──► Mock Interview → role-specific questions with scored feedback
+        │
+        └──► Progress Dashboard → aggregates scores and milestones across modules
+```
+
+## Screenshots / Demo
+
+<!-- PLACEHOLDER: Add screenshots of the application here.
+     Suggested images:
+       1. Login / Register screen
+       2. Progress Dashboard
+       3. Resume Analysis results
+       4. Skill Gap Analysis view
+       5. Roadmap output
+       6. Career Mentor chat
+       7. Mock Interview session
+
+     Place images in docs/screenshots/ and reference them below.
+     Example:
+       ![Dashboard](docs/screenshots/dashboard.png)
+       ![Resume Analysis](docs/screenshots/resume-analysis.png)
+-->
+
+> **Demo screenshots coming soon.** Clone the repository and run locally to explore the full application.
+
+## Repository
+
+| | |
+|---|---|
+| **Repository** | [github.com/imzohaib-web/CareerPilot-AI](https://github.com/imzohaib-web/CareerPilot-AI) |
+| **License** | See [LICENSE](LICENSE) _(add a LICENSE file to the repo)_ |
+| **Issues** | [Open an issue](https://github.com/imzohaib-web/CareerPilot-AI/issues) |
+
+## Local Setup
 
 ### Prerequisites
 
-- **Python 3.13+** with venv
-- **Node.js 18+** with npm
-- An **Alibaba Cloud API key** (for Qwen AI features)
-- **MongoDB** (optional — the app has offline-mode fallback)
+- **Python 3.13+** with `venv`
+- **Node.js 18+** with `npm`
+- An **Alibaba Cloud API key** (required for AI features)
+- **MongoDB** (optional — the app includes an offline-mode fallback)
 
-### 1. Backend
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/imzohaib-web/CareerPilot-AI.git
+cd CareerPilot-AI
+```
+
+### 2. Backend
 
 ```powershell
-cd "backend"
+cd backend
 
 # Create virtual environment and install dependencies
 python -m venv venv
 .\venv\Scripts\pip install -r requirements.txt
 
-# Configure environment
+# Configure environment variables
 copy .env.example .env
-# Edit .env and fill in your secrets (see Environment Variables below)
+# Edit .env — fill in your secrets (see Environment Variables below)
 
-# Start the server (http://localhost:8000)
+# Start the API server (http://localhost:8000)
 .\venv\Scripts\python -m uvicorn app.main:app --reload
 ```
 
-### 2. Frontend
+### 3. Frontend
 
 ```powershell
-cd "frontend"
+cd frontend
 
 # Install dependencies
 npm install
@@ -86,41 +189,78 @@ npm install
 npm run dev
 ```
 
-### 3. Open the app
+### 4. Open the Application
 
-Navigate to **http://localhost:5173**, register an account, and start exploring.
+Navigate to **http://localhost:5173**, register an account, and begin your career journey.
 
 ## Environment Variables
 
 ### Backend (`backend/.env`)
 
-Copy `backend/.env.example` to `backend/.env` and fill in:
+Copy `backend/.env.example` to `backend/.env` and configure:
 
-| Variable | Required | Purpose |
-|----------|----------|--------|
-| `MONGODB_URI` | Yes (production) | MongoDB Atlas connection string (optional locally — app has offline fallback) |
-| `JWT_SECRET` | Yes | Secret key for signing JWT tokens |
-| `ALIBABA_CLOUD_API_KEY` | Yes | Qwen / Alibaba Cloud Model Studio API key |
-| `ALIBABA_CLOUD_BASE_URL` | No | OpenAI-compatible endpoint URL (default: DashScope) |
-| `ALIBABA_CLOUD_MODEL` | No | Model name (default: `qwen-plus`) |
-| `MONGODB_NAME` | No | Database name (default: `careerpilot_ai`) |
-| `JWT_EXPIRES_MINUTES` | No | Token validity in minutes (default: 1440 = 24h) |
-| `FRONTEND_ORIGIN` | No | Comma-separated CORS origins (default: localhost dev ports) |
-| `QWEN_TIMEOUT` | No | Default Qwen request timeout in seconds (default: 60) |
-| `RESUME_MAX_SIZE_MB` | No | Maximum resume file size (default: 5 MB) |
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `MONGODB_URI` | Production | — | MongoDB Atlas connection string |
+| `JWT_SECRET` | Yes | — | Secret key for signing JWT tokens |
+| `ALIBABA_CLOUD_API_KEY` | Yes | — | Alibaba Cloud / Qwen API key |
+| `MONGODB_NAME` | No | `careerpilot_ai` | Database name |
+| `JWT_EXPIRES_MINUTES` | No | `1440` (24 h) | Token validity duration |
+| `ALIBABA_CLOUD_BASE_URL` | No | DashScope URL | OpenAI-compatible endpoint |
+| `ALIBABA_CLOUD_MODEL` | No | `qwen-plus` | Qwen model name |
+| `QWEN_TIMEOUT` | No | `60` | Qwen request timeout (seconds) |
+| `FRONTEND_ORIGIN` | No | `localhost:5173–5175` | Comma-separated CORS origins |
+| `RESUME_MAX_SIZE_MB` | No | `5` | Maximum resume upload size |
 
-### Frontend (`frontend/.env`) — Optional
+### Frontend (`frontend/.env`)
 
 | Variable | Default | Purpose |
-|----------|---------|--------|
+|----------|---------|---------|
 | `VITE_API_BASE_URL` | `http://localhost:8000` | Backend API base URL (no trailing slash) |
 
-> **Security**: Never commit `.env` files. Keep all secrets server-side. API keys never reach the frontend.
+> **Security:** Never commit `.env` files. All secrets stay server-side. API keys never reach the frontend.
+
+## API & Backend
+
+### Health Check
+
+```
+GET /api/health → { "status": "ok", "database": "connected" }
+```
+
+### API Routers (10 modules)
+
+| Router | Prefix | Purpose |
+|--------|--------|---------|
+| `auth` | `/api/auth` | Registration, login, JWT management |
+| `profile` | `/api/profile` | Career profile and target role |
+| `resume` | `/api/resume` | PDF upload, AI analysis, readiness score |
+| `skill_gap` | `/api` | Skill extraction and gap analysis |
+| `roadmap` | `/api/roadmap` | Personalized learning roadmap generation |
+| `interview` | `/api/interview` | Mock interview questions and scoring |
+| `ai` | `/api/ai` | General AI endpoints (career mentor) |
+| `chat` | `/api/chat` | Conversational chat with persistent context |
+| `rag` | `/api/rag` | RAG knowledge base queries |
+| `progress` | `/api/progress` | Progress tracking and dashboard aggregation |
+
+### Running Tests
+
+```powershell
+# Backend — 171 tests
+cd backend
+.\venv\Scripts\python -m pytest tests/ -v
+
+# Frontend
+cd frontend
+npx tsc --noEmit          # TypeScript type checking
+npx oxlint                # Lint checks
+npx vite build            # Production build verification
+```
 
 ## Project Structure
 
 ```
-CareerPilot AI/
+CareerPilot-AI/
 ├── backend/
 │   ├── app/
 │   │   ├── database/        # MongoDB connection + index creation
@@ -131,110 +271,74 @@ CareerPilot AI/
 │   │   │   └── ai/          # Qwen AI service (isolated)
 │   │   ├── config.py        # Settings from environment
 │   │   └── main.py          # App entry point + router registration
-│   ├── tests/               # 162 pytest tests
+│   ├── tests/               # 171 pytest tests
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
 │   ├── src/
 │   │   ├── components/      # Reusable React components
-│   │   ├── context/         # AuthContext (JWT state)
+│   │   ├── context/         # AuthContext (JWT state management)
 │   │   ├── layouts/         # AppLayout + sidebar navigation
-│   │   ├── pages/           # 11 page components
+│   │   ├── pages/           # 10 page components
 │   │   ├── services/        # API client layer (Axios)
 │   │   └── types/           # TypeScript type definitions
 │   ├── package.json
 │   ├── vercel.json          # Vercel SPA rewrite rules
 │   └── .env.example
-├── render.yaml               # Render deployment blueprint
-└── docs/                     # Architecture, specs, plans
+├── docs/                    # Architecture, specs, and plans
+├── render.yaml              # Render deployment blueprint
+└── README.md
 ```
-
-## Testing
-
-```powershell
-# Backend tests (162 tests)
-cd "backend"
-.\venv\Scripts\python -m pytest tests/ -v
-
-# Frontend checks
-cd "frontend"
-npx tsc --noEmit          # TypeScript type check
-npx oxlint                # Lint
-npx vite build            # Production build
-```
-
-## User Journey
-
-```
-Register → Login → Profile → Resume → Skill Gap → Roadmap → Mentor → Interview → Dashboard
-```
-
-Modules are connected with auto-fill and cross-module navigation:
-- **Resume analysis** auto-fills into Skill Gap Analysis
-- **Profile** auto-fills target role across modules
-- **Skill Gap results** link to Roadmap Generator
-- **Roadmap** links to Mentor and Mock Interview
-- **Dashboard** aggregates data from all modules
-
-## Documentation
-
-Architecture, specs, and plans live in [`docs/`](docs/PROJECT_SPEC.md):
-- [Project Spec](docs/PROJECT_SPEC.md) · [Architecture](docs/ARCHITECTURE.md) · [AI Architecture](docs/AI_ARCHITECTURE.md)
-- [API Spec](docs/API_SPEC.md) · [Database Schema](docs/DATABASE_SCHEMA.md) · [MVP Scope](docs/MVP_SCOPE.md)
-- [Demo Flow](docs/DEMO_FLOW.md) · [Development Plan](docs/DEVELOPMENT_PLAN.md)
 
 ## Deployment
 
 ### Frontend — Vercel
 
-1. Import the repository into Vercel and set the **root directory** to `frontend`.
-2. Add the environment variable `VITE_API_BASE_URL` pointing to your Render backend URL (e.g. `https://careerpilot-api.onrender.com`). No trailing slash.
+1. Import the repository into Vercel; set root directory to `frontend`.
+2. Add `VITE_API_BASE_URL` pointing to your backend URL (no trailing slash).
 3. Vercel auto-detects the Vite build (`npm run build`). Deploy.
-4. SPA routing is handled by `frontend/vercel.json` — all routes rewrite to `index.html`.
+4. SPA routing is handled by `frontend/vercel.json`.
 
 ### Backend — Render
 
-1. Create a new **Web Service** on Render and connect your GitHub repository.
-2. Set the **root directory** to `backend`.
+1. Create a **Web Service** on Render; connect your GitHub repository.
+2. Set root directory to `backend`.
 3. **Build command:** `pip install -r requirements.txt`
 4. **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Add the required environment variables in Render's dashboard:
-
-| Variable | Value |
-|----------|-------|
-| `MONGODB_URI` | Your MongoDB Atlas connection string |
-| `JWT_SECRET` | A long random string |
-| `ALIBABA_CLOUD_API_KEY` | Your Alibaba Cloud / Qwen API key |
-| `ALIBABA_CLOUD_BASE_URL` | Your Alibaba Cloud workspace endpoint |
-| `ALIBABA_CLOUD_MODEL` | `qwen-plus` (or your preferred model) |
-| `FRONTEND_ORIGIN` | Comma-separated allowed CORS origins — include both, e.g. `http://localhost:5173,https://careerpilot.vercel.app` |
-
+5. Configure environment variables in the Render dashboard (see [Environment Variables](#environment-variables)).
 6. **Health check path:** `/api/health`
-7. A `render.yaml` blueprint is included at the repository root for one-click deploy.
+
+A `render.yaml` blueprint is included at the repository root for one-click deploy.
 
 ### Database — MongoDB Atlas
 
-Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas). The `MONGODB_URI` should include the database user credentials. The app auto-creates indexes on first connection.
+Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas). The `MONGODB_URI` should include database user credentials. Indexes are auto-created on first connection.
 
-### AI — Alibaba Cloud Model Studio / Qwen
+### Architecture Diagram
 
-All AI features use the OpenAI-compatible endpoint. The API key and base URL are configured as backend environment variables and **never reach the frontend**.
+To add a visual architecture diagram:
 
-### Health Endpoint
-
-`GET /api/health` returns `{"status": "ok", "database": "connected"}` (or `"disconnected"` if MongoDB is unreachable).
-
-### Architecture
-
-```
-Vercel (React SPA)  →  Render (FastAPI)  →  MongoDB Atlas + Alibaba Cloud Qwen
-```
+1. Create your diagram (draw.io, Excalidraw, or similar) and export as PNG.
+2. Save it as **`docs/architecture.png`**.
+3. The README already references this path — no further changes needed.
 
 ## Team
 
-2 developers — Frontend/Full Stack and Backend/AI.
+| Role | Focus |
+|------|-------|
+| Full-Stack Developer | Frontend (React + TypeScript), UI/UX, integration |
+| Backend / AI Developer | FastAPI, Qwen AI integration, MongoDB, testing |
 
-## Hackathon
+## Future Improvements
 
-Built for the **Alibaba Cloud AI Hackathon Pakistan 2026** — theme: *AI for Pakistan's Future*.
-Build window: **29 August – 4 September 2026**.
+- **GitHub repository analysis** — scan a user's GitHub repos to auto-extract skills and projects
+- **LinkedIn profile optimization** — AI-powered suggestions for LinkedIn headlines, summaries, and keywords
+- **Voice-enabled mock interviews** — speech-to-text for natural interview practice
+- **AI cover letter generator** — tailored cover letters based on resume + job description
+- **Daily career challenges** — bite-sized tasks to build skills incrementally
+- **MCP-powered tool integrations** — extended AI agent capabilities via Model Context Protocol
+- **Multi-language resume support** — parse and analyze resumes in Urdu and other languages
+
+---
+
+Built for the **Alibaba Cloud AI Hackathon Pakistan 2026** · Build window: 29 August – 4 September 2026
