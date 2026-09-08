@@ -118,31 +118,8 @@ Roadmap Generator → creates personalized time-boxed learning plan
 
 ## Screenshots / Demo
 
-<!-- PLACEHOLDER: Add screenshots of the application here.
-     Suggested images:
-       1. Login / Register screen
-       2. Progress Dashboard
-       3. Resume Analysis results
-       4. Skill Gap Analysis view
-       5. Roadmap output
-       6. Career Mentor chat
-       7. Mock Interview session
+![Uploading Screenshot 2026-09-07 221723.png…]()
 
-     Place images in docs/screenshots/ and reference them below.
-     Example:
-       ![Dashboard](docs/screenshots/dashboard.png)
-       ![Resume Analysis](docs/screenshots/resume-analysis.png)
--->
-
-> **Demo screenshots coming soon.** Clone the repository and run locally to explore the full application.
-
-## Repository
-
-| | |
-|---|---|
-| **Repository** | [github.com/imzohaib-web/CareerPilot-AI](https://github.com/imzohaib-web/CareerPilot-AI) |
-| **License** | See [LICENSE](LICENSE) _(add a LICENSE file to the repo)_ |
-| **Issues** | [Open an issue](https://github.com/imzohaib-web/CareerPilot-AI/issues) |
 
 ## Local Setup
 
