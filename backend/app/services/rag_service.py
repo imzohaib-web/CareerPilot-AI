@@ -706,7 +706,8 @@ async def retrieve_context(
 
         sim = cosine_similarity(query_vec, c_vec)
         # Drop candidates below minimum relevance threshold
-        if sim >= config.RAG_MIN_SIMILARITY:
+        threshold = 0.05 if query_model == "hash-256-fallback" else config.RAG_MIN_SIMILARITY
+        if sim >= threshold:
             similarity_map[cid] = sim
             filtered_candidates[cid] = c
 

@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 class DocumentIngestRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="Document title or job description name")
     content: str = Field(..., min_length=10, description="Raw text content of the job description or career document")
-    category: Literal["job_description", "interview_guide", "skill_framework", "general"] = Field(
-        default="job_description", description="Category of document"
+    category: str = Field(
+        default="job_description", description="Category of document (e.g. role_matrix, learning_path, interview_guide, resume_guide, career_guide)"
     )
     metadata: dict[str, Any] | None = Field(default_factory=dict, description="Optional extra key-value tags")
 
@@ -91,3 +91,12 @@ class RAGChatResponse(BaseModel):
     status: Literal["grounded", "weak", "no_context"] = Field(
         default="grounded", description="Retrieval confidence status"
     )
+
+
+class KnowledgeBaseStats(BaseModel):
+    total_documents: int = Field(default=0, description="Total number of global knowledge base documents")
+    total_chunks: int = Field(default=0, description="Total number of global knowledge base chunks")
+    categories: dict[str, int] = Field(default_factory=dict, description="Document counts grouped by category")
+    chunks_by_category: dict[str, int] = Field(default_factory=dict, description="Chunk counts grouped by category")
+    last_seeded_at: datetime | None = Field(default=None, description="Timestamp of the most recent seed execution")
+    status: str = Field(default="ready", description="Knowledge base readiness status (ready, seeding, unseeded, error)")

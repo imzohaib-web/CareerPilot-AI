@@ -1,5 +1,6 @@
 """CareerPilot AI — FastAPI application entry point."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app import config
 from app.database.mongodb import close_db, connect_db, get_db
 from app.routes import ai, auth, chat, interview, profile, progress, rag, resume, roadmap, skill_gap
+from app.services.knowledge_seeder import seed_knowledge_background
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +27,8 @@ async def lifespan(app: FastAPI):
         ", ".join(config.CORS_ORIGINS) if config.CORS_ORIGINS else "(none configured)",
     )
     await connect_db()
+    # Non-blocking startup seeding of curated knowledge base (background task)
+    asyncio.create_task(seed_knowledge_background())
     yield
     await close_db()
 

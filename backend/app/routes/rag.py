@@ -10,12 +10,13 @@ from app.schemas.rag import (
     DocumentInfo,
     DocumentIngestRequest,
     DocumentUploadResponse,
+    KnowledgeBaseStats,
     RAGChatRequest,
     RAGChatResponse,
     RAGQueryRequest,
     RetrievalResult,
 )
-from app.services import rag_service
+from app.services import knowledge_seeder, rag_service
 from app.services.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -105,3 +106,19 @@ async def grounded_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate grounded RAG response",
         ) from exc
+
+
+def _get_optional_db() -> AsyncIOMotorDatabase | None:
+    """Return database handle if connected, otherwise None for resilient offline fallback."""
+    try:
+        return get_db()
+    except Exception:
+        return None
+
+
+@router.get("/knowledge-base/stats", response_model=KnowledgeBaseStats)
+async def get_knowledge_base_stats(
+    db: AsyncIOMotorDatabase | None = Depends(_get_optional_db),
+) -> KnowledgeBaseStats:
+    """Retrieve curated global knowledge base statistics, category breakdown, and status."""
+    return await knowledge_seeder.get_knowledge_base_stats(db=db)
