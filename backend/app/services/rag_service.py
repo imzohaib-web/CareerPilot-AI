@@ -47,6 +47,13 @@ class ChunkSourceList(list):
         self.status = status
 
 
+# ── Vector Search & Storage Constants ──────────────────────────────────────
+ATLAS_VECTOR_INDEX_NAME = config.ATLAS_VECTOR_INDEX_NAME
+RAG_CHUNKS_COLLECTION = config.RAG_CHUNKS_COLLECTION
+RAG_DOCUMENTS_COLLECTION = config.RAG_DOCUMENTS_COLLECTION
+VECTOR_EMBEDDING_FIELD = config.VECTOR_EMBEDDING_FIELD
+VECTOR_FILTER_FIELDS = ["scope", "user_id", "category", "document_id"]
+
 # ── In-Memory Offline Storage ──────────────────────────────────────────────
 _offline_rag_docs: dict[str, dict[str, Any]] = {}
 _offline_rag_chunks: dict[str, dict[str, Any]] = {}
@@ -494,12 +501,92 @@ async def delete_document(user_id: str, document_id: str, db=None) -> bool:
     return deleted
 
 
+async def execute_vector_search(
+    query_vec: list[float],
+    user_id: str | None = None,
+    scope: str | None = None,
+    category_filter: str | None = None,
+    document_ids: list[str] | None = None,
+    limit: int = 30,
+    num_candidates: int = 100,
+    index_name: str | None = None,
+    db=None,
+) -> list[dict[str, Any]]:
+    """Execute Atlas $vectorSearch aggregation stage with pre-filtering.
+
+    Reused by retrieve_context and standalone diagnostics.
+    """
+    if db is None:
+        db = _get_db()
+    if db is None or not hasattr(db, RAG_CHUNKS_COLLECTION):
+        return []
+
+    collection = getattr(db, RAG_CHUNKS_COLLECTION)
+
+    filter_clauses: list[dict[str, Any]] = []
+    if scope == "global":
+        filter_clauses.append({"scope": "global"})
+    elif scope == "user" and user_id:
+        filter_clauses.append({"user_id": user_id, "scope": {"$ne": "global"}})
+    elif user_id:
+        filter_clauses.append({"$or": [{"scope": "global"}, {"user_id": user_id}]})
+    elif scope:
+        filter_clauses.append({"scope": scope})
+
+    if category_filter:
+        filter_clauses.append({"category": category_filter})
+    if document_ids:
+        filter_clauses.append({"document_id": {"$in": document_ids}})
+
+    v_filter = None
+    if len(filter_clauses) > 1:
+        v_filter = {"$and": filter_clauses}
+    elif len(filter_clauses) == 1:
+        v_filter = filter_clauses[0]
+
+    stage: dict[str, Any] = {
+        "index": index_name or ATLAS_VECTOR_INDEX_NAME,
+        "path": VECTOR_EMBEDDING_FIELD,
+        "queryVector": query_vec,
+        "numCandidates": max(limit, num_candidates),
+        "limit": limit,
+    }
+    if v_filter:
+        stage["filter"] = v_filter
+
+    pipeline = [
+        {"$vectorSearch": stage},
+        {
+            "$project": {
+                "_id": 1,
+                "chunk_id": 1,
+                "document_id": 1,
+                "document_title": 1,
+                "user_id": 1,
+                "category": 1,
+                "scope": 1,
+                "chunk_index": 1,
+                "section_title": 1,
+                "content": 1,
+                "embedding": 1,
+                "embedding_model": 1,
+                "embedding_dim": 1,
+                "vector_score": {"$meta": "vectorSearchScore"},
+            }
+        },
+    ]
+
+    cursor = collection.aggregate(pipeline)
+    return await cursor.to_list(length=limit)
+
+
 async def retrieve_context(
     user_id: str,
     query: str,
     top_k: int = 5,
     category_filter: str | None = None,
     document_ids: list[str] | None = None,
+    vector_index_name: str | None = None,
     db=None,
 ) -> ChunkSourceList:
     """Perform scoped hybrid retrieval (Atlas Vector Search + BM25 keyword fusion).
@@ -544,51 +631,18 @@ async def retrieve_context(
     # 3. Retrieve Vector Candidates (Atlas $vectorSearch or in-memory fallback)
     vector_candidates: list[dict[str, Any]] = []
 
-    if db is not None and hasattr(db, "rag_chunks"):
+    if db is not None and hasattr(db, RAG_CHUNKS_COLLECTION):
         try:
-            # Build Atlas $vectorSearch pipeline with pre-filter
-            filter_clauses: list[dict[str, Any]] = [
-                {"$or": [{"scope": "global"}, {"user_id": user_id}]}
-            ]
-            if category_filter:
-                filter_clauses.append({"category": category_filter})
-            if document_ids:
-                filter_clauses.append({"document_id": {"$in": document_ids}})
-
-            v_filter = {"$and": filter_clauses} if len(filter_clauses) > 1 else filter_clauses[0]
-
-            pipeline = [
-                {
-                    "$vectorSearch": {
-                        "index": "rag_chunks_vector",
-                        "path": "embedding",
-                        "queryVector": query_vec,
-                        "numCandidates": 100,
-                        "limit": 30,
-                        "filter": v_filter,
-                    }
-                },
-                {
-                    "$project": {
-                        "_id": 1,
-                        "chunk_id": 1,
-                        "document_id": 1,
-                        "document_title": 1,
-                        "user_id": 1,
-                        "category": 1,
-                        "scope": 1,
-                        "chunk_index": 1,
-                        "section_title": 1,
-                        "content": 1,
-                        "embedding": 1,
-                        "embedding_model": 1,
-                        "embedding_dim": 1,
-                        "vector_score": {"$meta": "vectorSearchScore"},
-                    }
-                },
-            ]
-            cursor = db.rag_chunks.aggregate(pipeline)
-            vector_candidates = await cursor.to_list(length=30)
+            vector_candidates = await execute_vector_search(
+                query_vec=query_vec,
+                user_id=user_id,
+                category_filter=category_filter,
+                document_ids=document_ids,
+                limit=30,
+                num_candidates=100,
+                index_name=vector_index_name or ATLAS_VECTOR_INDEX_NAME,
+                db=db,
+            )
         except Exception as exc:
             logger.debug(
                 "Atlas $vectorSearch not available (%s); using in-memory cosine fallback",

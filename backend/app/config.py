@@ -74,6 +74,12 @@ EMBEDDING_TIMEOUT = float(os.getenv("EMBEDDING_TIMEOUT", "30"))
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 EMBEDDING_FALLBACK_MODEL = os.getenv("EMBEDDING_FALLBACK_MODEL", "")
 
+# --- Vector Search & Collections ---
+ATLAS_VECTOR_INDEX_NAME = os.getenv("ATLAS_VECTOR_INDEX_NAME", "rag_chunks_vector")
+RAG_CHUNKS_COLLECTION = os.getenv("RAG_CHUNKS_COLLECTION", "rag_chunks")
+RAG_DOCUMENTS_COLLECTION = os.getenv("RAG_DOCUMENTS_COLLECTION", "rag_documents")
+VECTOR_EMBEDDING_FIELD = os.getenv("VECTOR_EMBEDDING_FIELD", "embedding")
+
 # --- RAG Retrieval Pipeline ---
 RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.30"))
 RAG_STRONG_SIMILARITY = float(os.getenv("RAG_STRONG_SIMILARITY", "0.55"))

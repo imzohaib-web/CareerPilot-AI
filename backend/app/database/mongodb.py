@@ -244,9 +244,10 @@ async def _ensure_vector_search_index(db: AsyncIOMotorDatabase) -> None:
     Safely handles non-Atlas environments (M0 / local MongoDB) where
     createSearchIndexes is not supported by catching errors gracefully.
     """
-    index_name = "rag_chunks_vector"
+    index_name = config.ATLAS_VECTOR_INDEX_NAME
+    collection = getattr(db, config.RAG_CHUNKS_COLLECTION)
     try:
-        cursor = db.rag_chunks.aggregate([{"$listSearchIndexes": {"name": index_name}}])
+        cursor = collection.aggregate([{"$listSearchIndexes": {"name": index_name}}])
         existing = await cursor.to_list(length=1)
         if existing:
             logger.debug("Atlas vector search index '%s' already exists", index_name)
@@ -256,7 +257,7 @@ async def _ensure_vector_search_index(db: AsyncIOMotorDatabase) -> None:
 
     try:
         await db.command({
-            "createSearchIndexes": "rag_chunks",
+            "createSearchIndexes": config.RAG_CHUNKS_COLLECTION,
             "indexes": [
                 {
                     "name": index_name,
@@ -265,7 +266,7 @@ async def _ensure_vector_search_index(db: AsyncIOMotorDatabase) -> None:
                         "fields": [
                             {
                                 "type": "vector",
-                                "path": "embedding",
+                                "path": config.VECTOR_EMBEDDING_FIELD,
                                 "numDimensions": config.EMBEDDING_DIMENSIONS,
                                 "similarity": "cosine",
                             },
