@@ -1,7 +1,7 @@
 """Tests for RAG schemas, services, and REST API endpoints."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bson import ObjectId
@@ -217,3 +217,191 @@ async def test_rag_chat_endpoint():
     assert len(data["sources"]) == 1
     assert data["model_used"] == "qwen3.7-plus"
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_fallback_marks_hash_256_fallback():
+    """When the embedding API fails or API key is missing, fallback uses hash-256-fallback."""
+    user_id = str(FAKE_USER_ID)
+    payload = DocumentIngestRequest(
+        title="Test Offline Document",
+        content="This is sample content for testing offline fallback embedding marking.",
+        category="general",
+    )
+
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", ""):
+        res = await rag_service.ingest_document(user_id=user_id, payload=payload, db=None)
+
+    assert res.chunk_count >= 1
+    chunk = next(c for c in rag_service._offline_rag_chunks.values() if c.get("document_id") == res.document_id)
+    assert chunk["embedding_model"] == "hash-256-fallback"
+    assert chunk["embedding_dim"] == 256
+    assert len(chunk["embedding"]) == 256
+
+
+@pytest.mark.asyncio
+async def test_ingest_uses_real_semantic_embeddings():
+    """When embedding API succeeds, chunk is marked with text-embedding-v3 and dimension 1024."""
+    user_id = str(FAKE_USER_ID)
+    payload = DocumentIngestRequest(
+        title="Test Real Embedding Document",
+        content="Testing real DashScope semantic embedding indexing.",
+        category="job_description",
+    )
+
+    mock_vec = [0.05] * 1024
+    norm = sum(x * x for x in mock_vec) ** 0.5
+    normalized_vec = [x / norm for x in mock_vec]
+
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", "mock-key"):
+        with patch(
+            "app.services.ai.embedding_service.embed_texts",
+            new=AsyncMock(return_value=[normalized_vec]),
+        ):
+            res = await rag_service.ingest_document(user_id=user_id, payload=payload, db=None)
+
+    chunk = next(c for c in rag_service._offline_rag_chunks.values() if c.get("document_id") == res.document_id)
+    assert chunk["embedding_model"] == "text-embedding-v3"
+    assert chunk["embedding_dim"] == 1024
+    assert len(chunk["embedding"]) == 1024
+
+
+@pytest.mark.asyncio
+async def test_mismatched_model_chunks_excluded_from_search():
+    """Never mix vectors of different models: mismatched model chunks are excluded."""
+    user_id = str(FAKE_USER_ID)
+
+    doc_id = "test-doc-mismatch"
+    c1 = {
+        "_id": "chunk-hash",
+        "chunk_id": "chunk-hash",
+        "document_id": doc_id,
+        "document_title": "Old Doc",
+        "user_id": user_id,
+        "category": "general",
+        "chunk_index": 0,
+        "content": "Python backend engineer role with FastAPI",
+        "embedding": rag_service.compute_text_vector("Python backend engineer role with FastAPI"),
+        "embedding_model": "hash-256-fallback",
+        "embedding_dim": 256,
+    }
+    c2 = {
+        "_id": "chunk-v3",
+        "chunk_id": "chunk-v3",
+        "document_id": doc_id,
+        "document_title": "New Doc",
+        "user_id": user_id,
+        "category": "general",
+        "chunk_index": 1,
+        "content": "Python backend engineer role with FastAPI",
+        "embedding": [1.0 / (1024**0.5)] * 1024,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 1024,
+    }
+    rag_service._offline_rag_chunks["chunk-hash"] = c1
+    rag_service._offline_rag_chunks["chunk-v3"] = c2
+
+    query_vec = [1.0 / (1024**0.5)] * 1024
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", "mock-key"):
+        with patch(
+            "app.services.ai.embedding_service.embed_query",
+            new=AsyncMock(return_value=query_vec),
+        ):
+            results = await rag_service.retrieve_context(
+                user_id=user_id,
+                query="Python backend engineer",
+                top_k=5,
+                db=None,
+            )
+
+    retrieved_ids = [r.chunk_id for r in results]
+    assert "chunk-v3" in retrieved_ids
+    assert "chunk-hash" not in retrieved_ids
+
+
+@pytest.mark.asyncio
+async def test_query_chunk_dimension_consistency():
+    """Dimension and model consistency must hold in both directions."""
+    user_id = str(FAKE_USER_ID)
+
+    doc_id = "test-doc-dim-consistency"
+    c1 = {
+        "_id": "chunk-hash-only",
+        "chunk_id": "chunk-hash-only",
+        "document_id": doc_id,
+        "document_title": "Hash Doc",
+        "user_id": user_id,
+        "category": "general",
+        "chunk_index": 0,
+        "content": "FastAPI async development",
+        "embedding": rag_service.compute_text_vector("FastAPI async development"),
+        "embedding_model": "hash-256-fallback",
+        "embedding_dim": 256,
+    }
+    c2 = {
+        "_id": "chunk-v3-only",
+        "chunk_id": "chunk-v3-only",
+        "document_id": doc_id,
+        "document_title": "V3 Doc",
+        "user_id": user_id,
+        "category": "general",
+        "chunk_index": 1,
+        "content": "FastAPI async development",
+        "embedding": [1.0 / (1024**0.5)] * 1024,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 1024,
+    }
+    rag_service._offline_rag_chunks["chunk-hash-only"] = c1
+    rag_service._offline_rag_chunks["chunk-v3-only"] = c2
+
+    # Query in offline fallback mode (no key) -> query model is hash-256-fallback
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", ""):
+        results = await rag_service.retrieve_context(
+            user_id=user_id,
+            query="FastAPI",
+            top_k=5,
+            db=None,
+        )
+
+    retrieved_ids = [r.chunk_id for r in results]
+    assert "chunk-hash-only" in retrieved_ids
+    assert "chunk-v3-only" not in retrieved_ids
+
+
+@pytest.mark.asyncio
+async def test_reembed_migration_script():
+    """Verify scripts/reembed_chunks.py is idempotent and updates only mismatched chunks."""
+    from scripts.reembed_chunks import reembed_all_chunks
+
+    mock_db = MagicMock()
+    mock_chunks = [
+        {
+            "_id": "c1",
+            "content": "Text chunk 1",
+            "embedding": [0.1] * 256,
+            "embedding_model": "hash-256-fallback",
+            "embedding_dim": 256,
+        },
+        {
+            "_id": "c2",
+            "content": "Text chunk 2",
+            "embedding": [0.2] * 256,
+        },
+    ]
+
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=mock_chunks)
+    mock_db.rag_chunks.find = MagicMock(return_value=mock_cursor)
+    mock_db.rag_chunks.count_documents = AsyncMock(return_value=3)
+    mock_db.rag_chunks.update_one = AsyncMock()
+
+    mock_embeddings = [[0.05] * 1024, [0.06] * 1024]
+    with patch(
+        "app.services.ai.embedding_service.embed_texts",
+        new=AsyncMock(return_value=mock_embeddings),
+    ):
+        result = await reembed_all_chunks(db=mock_db)
+
+    assert result["migrated"] == 2
+    assert result["skipped"] == 1
+    assert mock_db.rag_chunks.update_one.call_count == 2

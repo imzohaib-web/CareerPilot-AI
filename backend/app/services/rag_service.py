@@ -6,6 +6,7 @@ in-memory offline fallback for resilient operation without MongoDB.
 """
 
 from datetime import datetime, timezone
+import logging
 import math
 import re
 from typing import Any
@@ -20,7 +21,10 @@ from app.schemas.rag import (
     DocumentUploadResponse,
     RAGChatResponse,
 )
-from app.services.ai import qwen_service
+from app.services.ai import embedding_service, qwen_service
+from app.services.ai.qwen_service import AIConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 def _get_db():
@@ -97,16 +101,15 @@ def compute_text_vector(text: str, vocab_dim: int = 256) -> list[float]:
 
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
-    """Compute cosine similarity between two normalized vectors."""
+    """Compute cosine similarity between two normalized vectors.
+
+    Since vectors are L2-normalized before storage and at query time,
+    the cosine similarity is equivalent to the dot product.
+    """
     if not v1 or not v2 or len(v1) != len(v2):
         return 0.0
     dot = sum(a * b for a, b in zip(v1, v2))
-    norm1 = math.sqrt(sum(a * a for a in v1))
-    norm2 = math.sqrt(sum(b * b for b in v2))
-    if norm1 == 0.0 or norm2 == 0.0:
-        return 0.0
-    similarity = dot / (norm1 * norm2)
-    return max(0.0, min(1.0, float(similarity)))
+    return max(0.0, min(1.0, float(dot)))
 
 
 # ── Core Service Implementation ───────────────────────────────────────────
@@ -134,10 +137,31 @@ async def ingest_document(
         "created_at": now,
     }
 
+    # Generate embeddings via DashScope embedding service with fallback
+    model_name = config.EMBEDDING_MODEL
+    dim = config.EMBEDDING_DIMENSIONS
+    embeddings: list[list[float]] = []
+
+    try:
+        if not config.ALIBABA_CLOUD_API_KEY:
+            raise AIConfigurationError("ALIBABA_CLOUD_API_KEY is not configured")
+        embeddings = await embedding_service.embed_texts(raw_chunks)
+        if embeddings and len(embeddings[0]) > 0:
+            dim = len(embeddings[0])
+    except Exception as exc:
+        logger.warning(
+            "Embedding API failed or unconfigured (%s: %s); falling back to hash-256 vectors",
+            type(exc).__name__,
+            exc,
+        )
+        model_name = "hash-256-fallback"
+        dim = 256
+        embeddings = [compute_text_vector(text, vocab_dim=256) for text in raw_chunks]
+
     chunks_data: list[dict[str, Any]] = []
     for idx, text in enumerate(raw_chunks):
         c_id = str(uuid.uuid4())
-        vec = compute_text_vector(text)
+        vec = embeddings[idx] if idx < len(embeddings) else compute_text_vector(text, vocab_dim=256)
         chunks_data.append({
             "_id": c_id,
             "chunk_id": c_id,
@@ -148,6 +172,8 @@ async def ingest_document(
             "chunk_index": idx,
             "content": text,
             "embedding": vec,
+            "embedding_model": model_name,
+            "embedding_dim": dim,
             "created_at": now,
         })
 
@@ -284,13 +310,52 @@ async def retrieve_context(
     if not all_chunks:
         return []
 
-    query_vec = compute_text_vector(query)
+    # Compute query embedding (DashScope semantic embedding or hash-256 fallback)
+    query_vec: list[float] = []
+    query_model = config.EMBEDDING_MODEL
+    query_dim = config.EMBEDDING_DIMENSIONS
+
+    try:
+        if not config.ALIBABA_CLOUD_API_KEY:
+            raise AIConfigurationError("ALIBABA_CLOUD_API_KEY is not configured")
+        query_vec = await embedding_service.embed_query(query)
+        if query_vec:
+            query_dim = len(query_vec)
+    except Exception as exc:
+        logger.warning(
+            "Query embedding failed or unconfigured (%s: %s); falling back to hash-256 vector",
+            type(exc).__name__,
+            exc,
+        )
+        query_model = "hash-256-fallback"
+        query_dim = 256
+        query_vec = compute_text_vector(query, vocab_dim=256)
+
     scored: list[tuple[float, dict[str, Any]]] = []
 
     for chunk in all_chunks:
+        chunk_model = chunk.get("embedding_model")
         chunk_vec = chunk.get("embedding")
+        chunk_dim = chunk.get("embedding_dim")
+
+        # Resolve legacy chunks without model metadata
+        if not chunk_model:
+            if chunk_vec and len(chunk_vec) == 256:
+                chunk_model = "hash-256-fallback"
+                chunk_dim = 256
+            elif chunk_vec:
+                chunk_dim = len(chunk_vec)
+
+        # Invariant: Never mix vectors of different models in one similarity comparison
+        if chunk_model != query_model or chunk_dim != query_dim:
+            continue
+
         if not chunk_vec:
-            chunk_vec = compute_text_vector(chunk.get("content", ""))
+            if chunk_model == "hash-256-fallback":
+                chunk_vec = compute_text_vector(chunk.get("content", ""), vocab_dim=256)
+            else:
+                continue
+
         sim = cosine_similarity(query_vec, chunk_vec)
         scored.append((sim, chunk))
 

@@ -67,6 +67,13 @@ QWEN_TIMEOUT = float(os.getenv("QWEN_TIMEOUT", "60"))
 # in <think> tags that break JSON parsing.
 QWEN_ENABLE_THINKING = os.getenv("QWEN_ENABLE_THINKING", "false").lower() == "true"
 
+# --- Embeddings (Alibaba Cloud Model Studio / DashScope) ---
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v3")
+EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1024"))
+EMBEDDING_TIMEOUT = float(os.getenv("EMBEDDING_TIMEOUT", "30"))
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
+EMBEDDING_FALLBACK_MODEL = os.getenv("EMBEDDING_FALLBACK_MODEL", "")
+
 # --- CORS (comma-separated list of allowed frontend origins) ---
 # Include BOTH local development and the production Vercel origin in
 # deployment environments, e.g.

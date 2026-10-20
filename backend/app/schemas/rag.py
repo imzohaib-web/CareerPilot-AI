@@ -21,6 +21,8 @@ class DocumentChunk(BaseModel):
     chunk_index: int
     content: str
     embedding: list[float] | None = None
+    embedding_model: str = Field(default="hash-256-fallback", description="Name of the embedding model used")
+    embedding_dim: int = Field(default=256, description="Dimension of the embedding vector")
     created_at: datetime
 
 
