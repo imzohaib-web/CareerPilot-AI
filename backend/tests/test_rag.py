@@ -405,3 +405,214 @@ async def test_reembed_migration_script():
     assert result["migrated"] == 2
     assert result["skipped"] == 1
     assert mock_db.rag_chunks.update_one.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_threshold_drops_irrelevant_chunks_and_yields_no_context():
+    """Chunks below RAG_MIN_SIMILARITY are dropped, returning no_context when all fail."""
+    user_id = "test-user-threshold"
+    c_irrelevant = {
+        "_id": "chunk-irrelevant",
+        "chunk_id": "chunk-irrelevant",
+        "document_id": "doc-irr",
+        "document_title": "Cooking Recipes",
+        "user_id": user_id,
+        "category": "general",
+        "scope": "user",
+        "chunk_index": 0,
+        "content": "Bake chocolate chip cookies at 350 degrees Fahrenheit.",
+        "embedding": [1.0, 0.0, 0.0, 0.0],
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 4,
+    }
+    rag_service._offline_rag_chunks["chunk-irrelevant"] = c_irrelevant
+
+    # Query vector is orthogonal: cosine similarity = 0.0 < 0.30 (RAG_MIN_SIMILARITY)
+    query_vec = [0.0, 1.0, 0.0, 0.0]
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", "mock-key"):
+        with patch.object(rag_service.config, "RAG_MIN_SIMILARITY", 0.30):
+            with patch(
+                "app.services.ai.embedding_service.embed_query",
+                new=AsyncMock(return_value=query_vec),
+            ):
+                results = await rag_service.retrieve_context(
+                    user_id=user_id,
+                    query="FastAPI distributed systems",
+                    top_k=5,
+                    db=None,
+                )
+
+    assert len(results) == 0
+    assert results.status == "no_context"
+
+
+def test_rrf_ordering_is_deterministic():
+    """Reciprocal rank fusion produces exact, deterministic ordering and mathematical scores."""
+    vec_ids = ["chunk_a", "chunk_b", "chunk_c"]
+    kw_ids = ["chunk_b", "chunk_c", "chunk_a"]
+
+    scores_1 = rag_service.reciprocal_rank_fusion(vec_ids, kw_ids, k=60)
+    scores_2 = rag_service.reciprocal_rank_fusion(vec_ids, kw_ids, k=60)
+
+    assert scores_1 == scores_2
+    # chunk_b: vec rank 2, kw rank 1 -> 1/62 + 1/61
+    expected_b = round((1.0 / 62) + (1.0 / 61), 6)
+    assert scores_1["chunk_b"] == expected_b
+    # chunk_b has higher combined rank than chunk_a and chunk_c
+    assert scores_1["chunk_b"] > scores_1["chunk_a"]
+    assert scores_1["chunk_a"] > scores_1["chunk_c"]
+
+
+@pytest.mark.asyncio
+async def test_scope_isolation_between_two_users_and_global_visibility():
+    """A user can retrieve their own private chunks + global chunks, NEVER another user's private chunks."""
+    user_a = "user-alice-123"
+    user_b = "user-bob-456"
+
+    unit_vec = [0.5, 0.5, 0.5, 0.5]
+
+    rag_service._offline_rag_chunks["chunk-alice"] = {
+        "_id": "chunk-alice",
+        "chunk_id": "chunk-alice",
+        "document_id": "doc-alice",
+        "document_title": "Alice Private Document",
+        "user_id": user_a,
+        "category": "general",
+        "scope": "user",
+        "chunk_index": 0,
+        "content": "Alice's proprietary system design notes.",
+        "embedding": unit_vec,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 4,
+    }
+    rag_service._offline_rag_chunks["chunk-bob"] = {
+        "_id": "chunk-bob",
+        "chunk_id": "chunk-bob",
+        "document_id": "doc-bob",
+        "document_title": "Bob Private Document",
+        "user_id": user_b,
+        "category": "general",
+        "scope": "user",
+        "chunk_index": 0,
+        "content": "Bob's confidential algorithm notes.",
+        "embedding": unit_vec,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 4,
+    }
+    rag_service._offline_rag_chunks["chunk-global"] = {
+        "_id": "chunk-global",
+        "chunk_id": "chunk-global",
+        "document_id": "doc-global",
+        "document_title": "Global Official Syllabus",
+        "user_id": None,
+        "category": "skill_framework",
+        "scope": "global",
+        "chunk_index": 0,
+        "content": "Public interview syllabus for backend engineers.",
+        "embedding": unit_vec,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 4,
+    }
+
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", "mock-key"):
+        with patch(
+            "app.services.ai.embedding_service.embed_query",
+            new=AsyncMock(return_value=unit_vec),
+        ):
+            # Query as Alice
+            alice_results = await rag_service.retrieve_context(
+                user_id=user_a,
+                query="backend systems notes",
+                top_k=5,
+                db=None,
+            )
+            alice_chunk_ids = [r.chunk_id for r in alice_results]
+            assert "chunk-alice" in alice_chunk_ids
+            assert "chunk-global" in alice_chunk_ids
+            assert "chunk-bob" not in alice_chunk_ids, "Alice must NOT see Bob's private chunks!"
+
+            # Query as Bob
+            bob_results = await rag_service.retrieve_context(
+                user_id=user_b,
+                query="backend systems notes",
+                top_k=5,
+                db=None,
+            )
+            bob_chunk_ids = [r.chunk_id for r in bob_results]
+            assert "chunk-bob" in bob_chunk_ids
+            assert "chunk-global" in bob_chunk_ids
+            assert "chunk-alice" not in bob_chunk_ids, "Bob must NOT see Alice's private chunks!"
+
+
+@pytest.mark.asyncio
+async def test_fallback_path_triggers_when_vector_search_raises():
+    """When Atlas $vectorSearch aggregate raises an error, fallback in-memory cosine search executes safely."""
+    user_id = "test-user-fallback-aggregate"
+    unit_vec = [0.5, 0.5, 0.5, 0.5]
+
+    c = {
+        "_id": "chunk-resilient",
+        "chunk_id": "chunk-resilient",
+        "document_id": "doc-resilient",
+        "document_title": "Resilient Service JD",
+        "user_id": user_id,
+        "category": "job_description",
+        "scope": "user",
+        "chunk_index": 0,
+        "content": "Resilient backend services with FastAPI and Redis.",
+        "embedding": unit_vec,
+        "embedding_model": "text-embedding-v3",
+        "embedding_dim": 4,
+    }
+
+    mock_db = MagicMock()
+    # aggregate raises an error to simulate missing Atlas index or non-Atlas environment
+    mock_db.rag_chunks.aggregate.side_effect = Exception("PlanExecutor error during $vectorSearch")
+    # find falls back to returning the candidate chunk
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[c])
+    mock_db.rag_chunks.find.return_value = mock_cursor
+
+    with patch.object(rag_service.config, "ALIBABA_CLOUD_API_KEY", "mock-key"):
+        with patch(
+            "app.services.ai.embedding_service.embed_query",
+            new=AsyncMock(return_value=unit_vec),
+        ):
+            results = await rag_service.retrieve_context(
+                user_id=user_id,
+                query="FastAPI backend",
+                top_k=5,
+                db=mock_db,
+            )
+
+    assert len(results) >= 1
+    assert results[0].chunk_id == "chunk-resilient"
+    assert results.status == "grounded"
+
+
+def test_chunker_respects_headings_and_overlap():
+    """Chunker extracts section_title from markdown headings and preserves overlap without mid-sentence splits."""
+    doc_text = """# Executive Overview
+CareerPilot AI is an automated career mentor. It provides end-to-end guidance from resume parsing to mock interviews.
+
+## Technical Requirements
+Candidates should demonstrate proficiency in Python, FastAPI, and async I/O.
+They must have practical experience with MongoDB indexing and Redis caching.
+Knowledge of distributed architectures and Docker containerization is required.
+"""
+
+    chunks = rag_service.chunk_document(doc_text, target_words=20, overlap_words=8)
+    assert len(chunks) >= 2
+
+    # Check section titles
+    assert chunks[0]["section_title"] == "Executive Overview"
+    # Later chunk captures the second heading
+    has_tech_heading = any(c.get("section_title") == "Technical Requirements" for c in chunks)
+    assert has_tech_heading
+
+    # Verify that chunks do not start with a broken trailing word
+    for c in chunks:
+        content = c["content"]
+        assert not content.startswith(".")
+        assert not content.startswith("?")
+        assert len(content.split()) > 0

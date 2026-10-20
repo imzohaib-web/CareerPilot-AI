@@ -74,6 +74,10 @@ EMBEDDING_TIMEOUT = float(os.getenv("EMBEDDING_TIMEOUT", "30"))
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 EMBEDDING_FALLBACK_MODEL = os.getenv("EMBEDDING_FALLBACK_MODEL", "")
 
+# --- RAG Retrieval Pipeline ---
+RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.30"))
+RAG_STRONG_SIMILARITY = float(os.getenv("RAG_STRONG_SIMILARITY", "0.55"))
+
 # --- CORS (comma-separated list of allowed frontend origins) ---
 # Include BOTH local development and the production Vercel origin in
 # deployment environments, e.g.

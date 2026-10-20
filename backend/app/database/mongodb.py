@@ -215,10 +215,75 @@ async def _ensure_indexes() -> None:
         await db.interviews.create_index("user_id")
         await db.rag_documents.create_index("user_id")
         await db.rag_chunks.create_index([("document_id", 1), ("user_id", 1)])
-        logger.info("MongoDB indexes verified for database '%s'", config.MONGODB_NAME)
+        await db.rag_chunks.create_index([("user_id", 1), ("scope", 1)])
+        try:
+            await db.rag_chunks.create_index([("content", "text")])
+        except Exception as exc:
+            logger.debug("Could not create text index on rag_chunks.content: %s", exc)
+
+        logger.info("MongoDB standard indexes verified for database '%s'", config.MONGODB_NAME)
     except Exception as exc:
         logger.warning(
             "Could not ensure MongoDB indexes (%s); continuing without them",
+            _classify_error(exc),
+        )
+
+    # Idempotent Atlas Vector Search index creation (createSearchIndexes)
+    try:
+        await _ensure_vector_search_index(db)
+    except Exception as exc:
+        logger.warning(
+            "Could not ensure Atlas Vector Search index (%s); in-memory fallback active",
+            _classify_error(exc),
+        )
+
+
+async def _ensure_vector_search_index(db: AsyncIOMotorDatabase) -> None:
+    """Idempotently create Atlas Vector Search index on rag_chunks.
+
+    Safely handles non-Atlas environments (M0 / local MongoDB) where
+    createSearchIndexes is not supported by catching errors gracefully.
+    """
+    index_name = "rag_chunks_vector"
+    try:
+        cursor = db.rag_chunks.aggregate([{"$listSearchIndexes": {"name": index_name}}])
+        existing = await cursor.to_list(length=1)
+        if existing:
+            logger.debug("Atlas vector search index '%s' already exists", index_name)
+            return
+    except Exception:
+        pass
+
+    try:
+        await db.command({
+            "createSearchIndexes": "rag_chunks",
+            "indexes": [
+                {
+                    "name": index_name,
+                    "type": "vectorSearch",
+                    "definition": {
+                        "fields": [
+                            {
+                                "type": "vector",
+                                "path": "embedding",
+                                "numDimensions": config.EMBEDDING_DIMENSIONS,
+                                "similarity": "cosine",
+                            },
+                            {"type": "filter", "path": "scope"},
+                            {"type": "filter", "path": "user_id"},
+                            {"type": "filter", "path": "category"},
+                            {"type": "filter", "path": "document_id"},
+                        ]
+                    },
+                }
+            ],
+        })
+        logger.info("Created Atlas Vector Search index '%s'", index_name)
+    except Exception as exc:
+        logger.warning(
+            "createSearchIndexes for '%s' not supported or limit reached (%s); "
+            "in-memory vector search fallback active",
+            index_name,
             _classify_error(exc),
         )
 

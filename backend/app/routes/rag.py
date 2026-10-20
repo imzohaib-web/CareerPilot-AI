@@ -81,6 +81,7 @@ async def query_knowledge_base(
         query=payload.query,
         chunks=chunks,
         total_retrieved=len(chunks),
+        status=getattr(chunks, "status", "grounded"),
     )
 
 

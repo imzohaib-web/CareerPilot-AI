@@ -3,7 +3,7 @@
 > **Your Personal AI Career Mentor, Resume Strategist & Interview Coach**
 > Built for the **Alibaba Cloud AI Hackathon Pakistan 2026** · Theme: *AI for Pakistan's Future* · Build Window: August 29 – September 4, 2026
 
-[![Backend Tests](https://img.shields.io/badge/pytest-189%20passed-emerald?style=flat-square&logo=pytest)](backend/tests/)
+[![Backend Tests](https://img.shields.io/badge/pytest-194%20passed-emerald?style=flat-square&logo=pytest)](backend/tests/)
 [![Frontend](https://img.shields.io/badge/frontend-React%2019%20%7C%20TypeScript-blue?style=flat-square&logo=react)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20Python%203.13-teal?style=flat-square&logo=fastapi)](backend/)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-Alibaba%20Cloud%20Qwen%20(qwen--plus)-orange?style=flat-square)](https://www.alibabacloud.com/en/solutions/model-studio)
