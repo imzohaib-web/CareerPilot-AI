@@ -4,8 +4,9 @@ The Career Mentor and feature-specific AI endpoints are intentionally NOT
 implemented here yet.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.core.rate_limit import limiter, medium_cost_rate_limit, require_medium_cost_quota
 from app.schemas.ai import AITestRequest, AITestResponse
 from app.services.ai import qwen_service
 from app.services.dependencies import get_current_user
@@ -19,9 +20,12 @@ TEST_SYSTEM_PROMPT = (
 
 
 @router.post("/test", response_model=AITestResponse)
+@limiter.limit(medium_cost_rate_limit)
 async def ai_test(
+    request: Request,
     body: AITestRequest,
     _: dict = Depends(get_current_user),
+    __: None = Depends(require_medium_cost_quota),
 ) -> AITestResponse:
     """Verify end-to-end Qwen connectivity for the authenticated user."""
     try:

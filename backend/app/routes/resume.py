@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
+from app.core.rate_limit import high_cost_rate_limit, limiter, require_high_cost_quota
 from app.schemas.resume import ResumeAnalysisResponse
 from app.services import resume_service
 from app.services.ai.qwen_service import AIConfigurationError, AIServiceError
@@ -15,9 +16,12 @@ router = APIRouter(prefix="/api/resume", tags=["resume"])
 
 
 @router.post("/analyze", response_model=ResumeAnalysisResponse)
+@limiter.limit(high_cost_rate_limit)
 async def upload_and_analyze(
+    request: Request,
     file: UploadFile = File(..., description="PDF resume file"),
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_high_cost_quota),
 ) -> ResumeAnalysisResponse:
     """Upload a PDF resume, extract text, run AI analysis, store, and return result."""
     # 1. Validate PDF + extract text

@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 
+from app.core.rate_limit import high_cost_rate_limit, limiter, require_high_cost_quota
 from app.schemas.skill_gap import SkillGapRequest, SkillGapResponse
 from app.services import skill_gap_service
 from app.services.ai.qwen_service import AIServiceError
@@ -15,9 +16,12 @@ router = APIRouter(prefix="/api", tags=["skill-gap"])
 
 
 @router.post("/analyze-gap", response_model=SkillGapResponse)
+@limiter.limit(high_cost_rate_limit)
 async def analyze_gap_route(
+    request: Request,
     payload: SkillGapRequest = Body(...),
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_high_cost_quota),
 ) -> SkillGapResponse:
     """Analyze missing skills for the user's target role and persist the result."""
     try:

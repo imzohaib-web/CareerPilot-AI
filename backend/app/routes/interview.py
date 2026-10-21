@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, status
 
+from app.core.rate_limit import high_cost_rate_limit, limiter, require_high_cost_quota
 from app.schemas.interview import (
     InterviewResponse,
     InterviewStartRequest,
@@ -19,9 +20,12 @@ router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 
 @router.post("/start", response_model=InterviewResponse)
+@limiter.limit(high_cost_rate_limit)
 async def start_interview_route(
+    request: Request,
     payload: InterviewStartRequest = Body(...),
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_high_cost_quota),
 ) -> InterviewResponse:
     """Start a new mock interview session and generate role-tailored questions."""
     try:
@@ -36,10 +40,13 @@ async def start_interview_route(
 
 
 @router.post("/{interview_id}/submit", response_model=InterviewResponse)
+@limiter.limit(high_cost_rate_limit)
 async def submit_interview_route(
+    request: Request,
     interview_id: str = Path(..., description="ID of the interview session"),
     payload: InterviewSubmitRequest = Body(...),
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_high_cost_quota),
 ) -> InterviewResponse:
     """Submit candidate answers to be evaluated and scored by AI."""
     try:

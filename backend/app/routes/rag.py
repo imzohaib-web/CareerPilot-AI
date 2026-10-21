@@ -2,9 +2,17 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app import config
+from app.core.rate_limit import (
+    limiter,
+    low_cost_rate_limit,
+    medium_cost_rate_limit,
+    require_low_cost_quota,
+    require_medium_cost_quota,
+)
 from app.database.mongodb import get_db
 from app.schemas.rag import (
     DocumentInfo,
@@ -25,12 +33,40 @@ router = APIRouter(prefix="/api/rag", tags=["RAG & Knowledge Base"])
 
 
 @router.post("/documents/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(low_cost_rate_limit)
 async def upload_document(
+    request: Request,
     payload: DocumentIngestRequest,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_low_cost_quota),
 ) -> DocumentUploadResponse:
-    """Ingest a new job description or career document into vector chunks."""
+    """Ingest a new job description or career document into vector chunks. Capped at 20 docs and 2 MB text."""
     user_id = str(current_user["_id"])
+    content_bytes = len(payload.content.encode("utf-8"))
+
+    if content_bytes > config.RAG_MAX_TEXT_BYTES_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document exceeds maximum allowable text size of {config.RAG_MAX_TEXT_BYTES_PER_USER // (1024 * 1024)} MB",
+        )
+
+    # Check user document count and cumulative text size caps
+    existing = await rag_service.list_user_documents(user_id=user_id)
+    user_docs = [d for d in existing if d.scope != "global" and d.user_id == user_id]
+
+    if len(user_docs) >= config.RAG_MAX_DOCUMENTS_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document upload cap reached (maximum {config.RAG_MAX_DOCUMENTS_PER_USER} documents per user)",
+        )
+
+    cumulative_bytes = sum(getattr(d, "content_length", 0) for d in user_docs)
+    if cumulative_bytes + content_bytes > config.RAG_MAX_TEXT_BYTES_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Total document storage limit reached (maximum {config.RAG_MAX_TEXT_BYTES_PER_USER // (1024 * 1024)} MB per user)",
+        )
+
     try:
         return await rag_service.ingest_document(user_id=user_id, payload=payload)
     except Exception as exc:
@@ -66,9 +102,12 @@ async def delete_document(
 
 
 @router.post("/query", response_model=RetrievalResult)
+@limiter.limit(low_cost_rate_limit)
 async def query_knowledge_base(
+    request: Request,
     payload: RAGQueryRequest,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_low_cost_quota),
 ) -> RetrievalResult:
     """Perform vector similarity search over knowledge base document chunks."""
     user_id = str(current_user["_id"])
@@ -87,9 +126,12 @@ async def query_knowledge_base(
 
 
 @router.post("/chat", response_model=RAGChatResponse)
+@limiter.limit(medium_cost_rate_limit)
 async def grounded_chat(
+    request: Request,
     payload: RAGChatRequest,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_medium_cost_quota),
 ) -> RAGChatResponse:
     """Ask a question and receive an AI answer grounded in retrieved document context."""
     user_id = str(current_user["_id"])

@@ -5,8 +5,9 @@ JWT (never from the request body).  Handlers stay thin — validate → call
 ``chat_service`` → map service exceptions to HTTP codes.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.core.rate_limit import limiter, medium_cost_rate_limit, require_medium_cost_quota
 from app.schemas.chat import (
     MentorChatRequest,
     MentorChatResponse,
@@ -20,9 +21,12 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 @router.post("/message", response_model=MentorChatResponse)
+@limiter.limit(medium_cost_rate_limit)
 async def send_message(
+    request: Request,
     body: MentorChatRequest,
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_medium_cost_quota),
 ) -> MentorChatResponse:
     """Send one message to the AI Career Mentor and store the turn."""
     try:

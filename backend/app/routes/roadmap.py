@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, status
 
+from app.core.rate_limit import high_cost_rate_limit, limiter, require_high_cost_quota
 from app.schemas.roadmap import (
     RoadmapRequest,
     RoadmapResponse,
@@ -19,9 +20,12 @@ router = APIRouter(prefix="/api/roadmap", tags=["roadmap"])
 
 
 @router.post("/generate", response_model=RoadmapResponse)
+@limiter.limit(high_cost_rate_limit)
 async def generate_roadmap_route(
+    request: Request,
     payload: RoadmapRequest = Body(...),
     current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_high_cost_quota),
 ) -> RoadmapResponse:
     """Generate a personalized phased learning roadmap and persist it."""
     try:
