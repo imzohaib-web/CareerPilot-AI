@@ -254,14 +254,17 @@ async def check_query_embedding(query: str) -> tuple[CheckResult, list[float], f
 async def check_vector_search(
     db,
     query_vec: list[float],
-    scope: str | None,
-    user_id: str | None,
-    limit: int,
-    total_chunks: int,
+    scope: str | None = None,
+    user_id: str | None = None,
+    limit: int = 5,
+    total_chunks: int = 0,
+    query: str | None = None,
 ) -> tuple[CheckResult, list[dict[str, Any]], float]:
-    """Execute raw $vectorSearch stage and inspect top retrieved candidates."""
+    """Execute raw $vectorSearch stage and confirm retrieval_backend is 'atlas' (not in-memory fallback)."""
     if not query_vec:
         return CheckResult(6, "Vector Search Check", "FAIL", "No query vector available"), [], 0.0
+
+    test_query = query or "What skills does a junior backend developer need?"
 
     t0 = time.perf_counter()
     try:
@@ -297,6 +300,26 @@ async def check_vector_search(
             ), [], latency_ms
         return CheckResult(6, "Vector Search Check", "WARN", "Zero results (database is empty)"), [], latency_ms
 
+    # Explicit check: confirm app's retrieve_context uses Atlas and did NOT trigger in-memory fallback
+    try:
+        retrieval_res = await rag_service.retrieve_context(
+            user_id=user_id or "verify_vector_search_user",
+            query=test_query,
+            top_k=limit,
+            db=db,
+        )
+        backend_used = getattr(retrieval_res, "retrieval_backend", "atlas")
+        if backend_used == "memory":
+            return CheckResult(
+                6, "Vector Search Check", "FAIL",
+                "App retrieval triggered in-memory fallback instead of Atlas Vector Search (retrieval_backend='memory')"
+            ), results, latency_ms
+    except Exception as exc:
+        return CheckResult(
+            6, "Vector Search Check", "FAIL",
+            f"retrieve_context raised exception: {type(exc).__name__}: {exc}"
+        ), results, latency_ms
+
     top_score = results[0].get("vector_score", 0.0)
     if top_score < config.RAG_MIN_SIMILARITY:
         return CheckResult(
@@ -306,8 +329,9 @@ async def check_vector_search(
 
     return CheckResult(
         6, "Vector Search Check", "PASS",
-        f"Returned {len(results)} chunks (top_score={top_score:.4f}, latency={latency_ms:.1f}ms)"
+        f"Returned {len(results)} chunks via Atlas (top_score={top_score:.4f}, latency={latency_ms:.1f}ms)"
     ), results, latency_ms
+
 
 
 # ── Check 7: Paraphrase Check ──────────────────────────────────────────────
@@ -474,9 +498,11 @@ async def run_diagnostics(
             user_id=user_id,
             limit=limit,
             total_chunks=total_chunks,
+            query=query,
         )
         print(f"==> {c6.status}: {c6.details}\n")
         results.append(c6)
+
 
         # 7. Paraphrase Check
         print("[7/9] Running Paraphrase Semantic Equivalence Checks...")

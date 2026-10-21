@@ -81,8 +81,12 @@ RAG_DOCUMENTS_COLLECTION = os.getenv("RAG_DOCUMENTS_COLLECTION", "rag_documents"
 VECTOR_EMBEDDING_FIELD = os.getenv("VECTOR_EMBEDDING_FIELD", "embedding")
 
 # --- RAG Retrieval Pipeline ---
-RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.30"))
-RAG_STRONG_SIMILARITY = float(os.getenv("RAG_STRONG_SIMILARITY", "0.55"))
+RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.58"))
+RAG_WEAK_SIMILARITY = float(os.getenv("RAG_WEAK_SIMILARITY", "0.42"))
+RAG_STRONG_SIMILARITY = float(os.getenv("RAG_STRONG_SIMILARITY", "0.75"))
+RAG_VECTOR_WEIGHT = float(os.getenv("RAG_VECTOR_WEIGHT", "0.7"))
+RAG_KEYWORD_WEIGHT = float(os.getenv("RAG_KEYWORD_WEIGHT", "0.3"))
+RAG_ROLE_BOOST_FACTOR = float(os.getenv("RAG_ROLE_BOOST_FACTOR", "1.25"))
 
 # --- CORS (comma-separated list of allowed frontend origins) ---
 # Include BOTH local development and the production Vercel origin in

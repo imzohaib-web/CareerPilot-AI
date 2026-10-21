@@ -1,0 +1,242 @@
+[
+  {
+    "id": 1,
+    "query": "What skills does a junior backend developer need?",
+    "type": "direct",
+    "expected_document_title": "Junior Backend Engineer Skill Matrix"
+  },
+  {
+    "id": 2,
+    "query": "How do I answer a behavioral question using the STAR method?",
+    "type": "direct",
+    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
+  },
+  {
+    "id": 3,
+    "query": "How should I format an ATS friendly resume?",
+    "type": "direct",
+    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
+  },
+  {
+    "id": 4,
+    "query": "FastAPI framework and building production REST APIs",
+    "type": "direct",
+    "expected_document_title": "FastAPI Framework and Production REST API Engineering"
+  },
+  {
+    "id": 5,
+    "query": "Docker containerization multi-stage builds and docker-compose",
+    "type": "direct",
+    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
+  },
+  {
+    "id": 6,
+    "query": "What are the fundamentals of CI/CD with GitHub Actions?",
+    "type": "direct",
+    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions"
+  },
+  {
+    "id": 7,
+    "query": "How can Pakistani software engineers get remote freelancing clients?",
+    "type": "direct",
+    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
+  },
+  {
+    "id": 8,
+    "query": "What are the hiring standards and technical entry tests in Pakistan software houses?",
+    "type": "direct",
+    "expected_document_title": "Pakistan Software Houses Hiring Standards and Technical Entry Tests"
+  },
+  {
+    "id": 9,
+    "query": "server-side engineer responsibilities and requirements",
+    "type": "paraphrase",
+    "expected_document_title": "Junior Backend Engineer Skill Matrix"
+  },
+  {
+    "id": 10,
+    "query": "how to answer scenario based behavioral interview prompts effectively",
+    "type": "paraphrase",
+    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
+  },
+  {
+    "id": 11,
+    "query": "how to pass corporate applicant tracking system cv scanners",
+    "type": "paraphrase",
+    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
+  },
+  {
+    "id": 12,
+    "query": "creating lightweight container images for cloud microservice deployments",
+    "type": "paraphrase",
+    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
+  },
+  {
+    "id": 13,
+    "query": "automated test running on pull requests using git workflows",
+    "type": "paraphrase",
+    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions"
+  },
+  {
+    "id": 14,
+    "query": "how developers from Pakistan land international contract work on Upwork and LinkedIn",
+    "type": "paraphrase",
+    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
+  },
+  {
+    "id": 15,
+    "query": "turning university software development internship into permanent employment",
+    "type": "paraphrase",
+    "expected_document_title": "Transitioning from University Internship to Full-Time Software Engineer"
+  },
+  {
+    "id": 16,
+    "query": "optimizing LinkedIn profile and choosing cloud certifications for engineers",
+    "type": "paraphrase",
+    "expected_document_title": "Professional LinkedIn Strategy and Industry Certifications for Developers"
+  },
+  {
+    "id": 17,
+    "query": "relational database design PostgreSQL indexing and SQL queries",
+    "type": "synonym",
+    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL"
+  },
+  {
+    "id": 18,
+    "query": "NoSQL document collections MongoDB queries and aggregation pipelines",
+    "type": "synonym",
+    "expected_document_title": "Document Databases, MongoDB, and Unstructured Data Modeling"
+  },
+  {
+    "id": 19,
+    "query": "version control branching git flow merge conflicts and pull requests",
+    "type": "synonym",
+    "expected_document_title": "Git Version Control, Branching Models, and Collaborative Pull Requests"
+  },
+  {
+    "id": 20,
+    "query": "unit testing with pytest test doubles mocking and integration test suites",
+    "type": "synonym",
+    "expected_document_title": "Software Testing Fundamentals, Pytest, Unit Testing, and Mocking"
+  },
+  {
+    "id": 21,
+    "query": "distributed systems horizontal scaling load balancing and caching patterns",
+    "type": "synonym",
+    "expected_document_title": "Foundational System Design, Scalability, and Distributed Architectural Patterns"
+  },
+  {
+    "id": 22,
+    "query": "machine learning embeddings semantic search and retrieval augmented generation",
+    "type": "synonym",
+    "expected_document_title": "Machine Learning Fundamentals, Vector Embeddings, and RAG Architecture"
+  },
+  {
+    "id": 23,
+    "query": "data structures Big O time complexity arrays trees and graph algorithms",
+    "type": "synonym",
+    "expected_document_title": "Data Structures, Algorithms, and Technical Problem Solving Patterns"
+  },
+  {
+    "id": 24,
+    "query": "writing quantified resume bullet points using Google XYZ formula",
+    "type": "synonym",
+    "expected_document_title": "Writing High-Impact Quantified Resume Bullets Using Action Formulas"
+  },
+  {
+    "id": 25,
+    "query": "What core competencies are expected from a junior frontend engineer?",
+    "type": "role_specific",
+    "expected_document_title": "Junior Frontend Engineer Skill Matrix"
+  },
+  {
+    "id": 26,
+    "query": "What technical skills does a junior full-stack developer need?",
+    "type": "role_specific",
+    "expected_document_title": "Junior Full-Stack Engineer Skill Matrix"
+  },
+  {
+    "id": 27,
+    "query": "What tools and skills are mandatory for a junior data analyst?",
+    "type": "role_specific",
+    "expected_document_title": "Junior Data Analyst Skill Matrix"
+  },
+  {
+    "id": 28,
+    "query": "What does a junior data scientist do and what skills are required?",
+    "type": "role_specific",
+    "expected_document_title": "Junior Data Scientist Skill Matrix"
+  },
+  {
+    "id": 29,
+    "query": "Junior DevOps and Cloud engineer skills Terraform AWS and Kubernetes",
+    "type": "role_specific",
+    "expected_document_title": "Junior DevOps and Cloud Engineer Skill Matrix"
+  },
+  {
+    "id": 30,
+    "query": "What skills are needed for a junior QA automation and SDET engineer?",
+    "type": "role_specific",
+    "expected_document_title": "Junior QA and SDET Skill Matrix"
+  },
+  {
+    "id": 31,
+    "query": "Junior mobile developer skills Flutter React Native iOS Android",
+    "type": "role_specific",
+    "expected_document_title": "Junior Mobile Application Developer Skill Matrix"
+  },
+  {
+    "id": 32,
+    "query": "Junior machine learning and AI engineer skill matrix and roadmap",
+    "type": "role_specific",
+    "expected_document_title": "Junior Machine Learning and AI Engineer Skill Matrix"
+  },
+  {
+    "id": 33,
+    "query": "fastpi dependecy injecton and pydantc schemas",
+    "type": "misspelled",
+    "expected_document_title": "FastAPI Framework and Production REST API Engineering"
+  },
+  {
+    "id": 34,
+    "query": "dokcerfile multi stage buikd and compose yamls",
+    "type": "misspelled",
+    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
+  },
+  {
+    "id": 35,
+    "query": "behaveoral interveiw using star methd stituation task",
+    "type": "misspelled",
+    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
+  },
+  {
+    "id": 36,
+    "query": "ats freindly cv bullet ponits and formating guidlines",
+    "type": "misspelled",
+    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
+  },
+  {
+    "id": 37,
+    "query": "relatonal databse sql posgtresql indexng queries",
+    "type": "misspelled",
+    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL"
+  },
+  {
+    "id": 38,
+    "query": "git branchng rebase and pull reqeust conflict resoluton",
+    "type": "misspelled",
+    "expected_document_title": "Git Version Control, Branching Models, and Collaborative Pull Requests"
+  },
+  {
+    "id": 39,
+    "query": "pakistan remot softwre hous freelancng upwrk contracts",
+    "type": "misspelled",
+    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
+  },
+  {
+    "id": 40,
+    "query": "pythn async await event loop and asyncio architecture",
+    "type": "misspelled",
+    "expected_document_title": "Python Core Programming and Asynchronous Architecture"
+  }
+]

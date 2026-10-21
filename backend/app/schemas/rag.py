@@ -25,6 +25,8 @@ class DocumentChunk(BaseModel):
     embedding_dim: int = Field(default=256, description="Dimension of the embedding vector")
     scope: Literal["global", "user"] = Field(default="user", description="Chunk visibility scope")
     section_title: str | None = Field(default=None, description="Optional section heading")
+    heading_path: str | None = Field(default=None, description="Optional breadcrumb heading path")
+    role: str | None = Field(default=None, description="Associated role tag")
     user_id: str | None = Field(default=None, description="Owner user ID or None for global")
     created_at: datetime
 
@@ -65,8 +67,10 @@ class ChunkSource(BaseModel):
     fused_score: float = Field(default=0.0, description="Reciprocal Rank Fusion score")
     rank: int = Field(default=1, description="Fused ranking position")
     category: str = Field(default="general", description="Document category")
+    role: str | None = Field(default=None, description="Target role tag")
     scope: str = Field(default="user", description="Scope: user or global")
     section_title: str | None = Field(default=None, description="Section heading")
+    heading_path: str | None = Field(default=None, description="Breadcrumb heading path")
 
 
 class RetrievalResult(BaseModel):
@@ -76,6 +80,10 @@ class RetrievalResult(BaseModel):
     status: Literal["grounded", "weak", "no_context"] = Field(
         default="grounded", description="Retrieval confidence status"
     )
+    retrieval_backend: Literal["atlas", "memory"] = Field(
+        default="atlas", description="Backend used for vector retrieval ('atlas' or 'memory')"
+    )
+
 
 
 class RAGChatRequest(BaseModel):

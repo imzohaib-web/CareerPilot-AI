@@ -616,3 +616,126 @@ Knowledge of distributed architectures and Docker containerization is required.
         assert not content.startswith(".")
         assert not content.startswith("?")
         assert len(content.split()) > 0
+
+
+def test_bm25_statistics_rare_vs_generic():
+    """Verify BM25 tokenization drops stopwords and discriminates rare technical terms over generic words."""
+    query = "FastAPI backend ci/cd"
+    chunks = [
+        {
+            "chunk_id": "c1",
+            "content": "Production FastAPI and Python backend engineering utilizing Docker and automated ci/cd pipelines.",
+        },
+        {
+            "chunk_id": "c2",
+            "content": "What is needed to understand the generic development process and how tasks are done.",
+        },
+        {
+            "chunk_id": "c3",
+            "content": "A general guide explaining what you need and how to do common software tasks.",
+        },
+    ]
+
+    scores = rag_service.compute_bm25_scores(query, chunks)
+    assert scores["c1"] > scores["c2"]
+    assert scores["c1"] > scores["c3"]
+    assert scores["c1"] > 0.5
+    # Chunks 2 & 3 contain only stopwords / generic filler terms and receive 0 or near 0
+    assert scores["c2"] == 0.0
+    assert scores["c3"] == 0.0
+
+
+def test_weighted_fusion_backend_matrix_outranks():
+    """Regression test: Backend matrix chunk must outrank Frontend and Mobile chunks for backend query."""
+    query = "What skills does a junior backend developer need?"
+
+    similarity_map = {
+        "backend_chunk": 0.85,
+        "frontend_chunk": 0.74,
+        "mobile_chunk": 0.68,
+    }
+
+    # Vector rank: backend #1, frontend #2, mobile #3
+    vector_ranked = ["backend_chunk", "frontend_chunk", "mobile_chunk"]
+
+    # Even if lexical matches give frontend higher keyword rank (e.g. #1 frontend, #2 backend, #3 mobile)
+    keyword_ranked = ["frontend_chunk", "backend_chunk", "mobile_chunk"]
+
+    fused = rag_service.weighted_rank_fusion(
+        vector_ranked_ids=vector_ranked,
+        keyword_ranked_ids=keyword_ranked,
+        similarity_map=similarity_map,
+        k=60,
+        vector_weight=0.7,
+        keyword_weight=0.3,
+        cosine_bonus_weight=0.02,
+    )
+
+    # Apply role boost as query analyzer detects "backend"
+    query_info = rag_service.analyze_query(query)
+    assert query_info["detected_role"] == "backend"
+
+    boosted = dict(fused)
+    boosted["backend_chunk"] = round(boosted["backend_chunk"] * 1.25, 6)
+
+    # Assert Backend matrix chunk strictly outranks Frontend and Mobile
+    assert boosted["backend_chunk"] > boosted["frontend_chunk"]
+    assert boosted["backend_chunk"] > boosted["mobile_chunk"]
+    sorted_chunks = sorted(boosted.keys(), key=lambda x: boosted[x], reverse=True)
+    assert sorted_chunks[0] == "backend_chunk"
+
+
+def test_query_analyzer_and_metadata_boost():
+    """Verify query analyzer detects role and skills across diverse phrasings."""
+    res1 = rag_service.analyze_query("I am preparing for a junior backend developer interview")
+    assert res1["detected_role"] == "backend"
+
+    res2 = rag_service.analyze_query("What questions are asked in Data Analyst interviews?")
+    assert res2["detected_role"] == "data_analyst"
+
+    res3 = rag_service.analyze_query("How to build CI/CD pipelines with Docker and FastAPI")
+    assert "fastapi" in res3["detected_skills"]
+    assert "docker" in res3["detected_skills"]
+    assert "ci/cd" in res3["detected_skills"]
+
+
+def test_chunker_section_title_governs_first_sentence():
+    """A markdown fixture with 3 distinct headings verifies every chunk's section_title matches its first line."""
+    md_text = """# Architecture Overview
+This is the high-level architecture overview of the CareerPilot system.
+It coordinates between front-end UI and microservices.
+
+## Relational Databases and SQL
+Relational database management requires strict schema migrations.
+PostgreSQL and MySQL use structured query language for transactions.
+ACID guarantees ensure data consistency across financial operations.
+
+### Non-Relational Storage and MongoDB
+Document databases store polymorphic JSON-like schemas.
+MongoDB Atlas provides distributed vector search and collection sharding.
+Redis provides fast in-memory key-value caching.
+"""
+
+    chunks = rag_service.chunk_document(md_text, target_words=25, overlap_words=5, doc_title="System Design")
+    assert len(chunks) >= 3
+
+    for idx, c in enumerate(chunks):
+        content = c["content"]
+        sec_title = c["section_title"]
+        heading_path = c["heading_path"]
+
+        # The first sentence of the chunk must be governed by sec_title
+        first_sentence = content.split(".")[0].strip()
+        assert sec_title is not None
+        assert heading_path is not None
+
+        if "high-level architecture overview" in first_sentence:
+            assert sec_title == "Architecture Overview"
+            assert "Architecture Overview" in heading_path
+        elif "Relational database management" in first_sentence:
+            assert sec_title == "Relational Databases and SQL"
+            assert "Relational Databases and SQL" in heading_path
+        elif "Document databases store" in first_sentence:
+            assert sec_title == "Non-Relational Storage and MongoDB"
+            assert "Non-Relational Storage and MongoDB" in heading_path
+

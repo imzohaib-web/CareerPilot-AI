@@ -35,16 +35,21 @@ def _get_db():
         return None
 
 
+CHUNKER_VERSION = "v2_heading_governed"
+
+
 class ChunkSourceList(list):
-    """List of ChunkSource items with an attached retrieval confidence status."""
+    """List of ChunkSource items with attached retrieval confidence status and backend engine."""
 
     def __init__(
         self,
         items: list[ChunkSource] | None = None,
         status: str = "grounded",
+        retrieval_backend: str = "atlas",
     ):
         super().__init__(items or [])
         self.status = status
+        self.retrieval_backend = retrieval_backend
 
 
 # ── Vector Search & Storage Constants ──────────────────────────────────────
@@ -102,7 +107,7 @@ def _split_into_sentences(text: str, max_words: int = 300, overlap_words: int = 
             continue
         words = s_clean.split()
         if len(words) > max_words:
-            # Unavoidable: break oversized sentence/run-on text by words
+            # Break oversized sentence/run-on text by words
             step = max(1, max_words - overlap_words)
             for i in range(0, len(words), step):
                 chunk_w = words[i : i + max_words]
@@ -119,10 +124,14 @@ def chunk_document(
     text: str,
     target_words: int = 300,
     overlap_words: int = 45,
+    doc_title: str | None = None,
 ) -> list[dict[str, Any]]:
     """Split raw text into semantic chunks respecting headings, paragraphs, and sentence boundaries.
 
-    Returns a list of dicts: ``{"content": chunk_text, "section_title": heading_or_none}``.
+    Each chunk's section_title and heading_path are strictly governed by the FIRST sentence
+    contained in that chunk (the nearest preceding heading).
+    Returns a list of dicts:
+        ``{"content": chunk_text, "section_title": heading, "heading_path": path}``.
     Target size: ~250-350 words with ~15% overlap. Avoids mid-sentence splits.
     """
     cleaned = text.strip()
@@ -130,86 +139,134 @@ def chunk_document(
         return []
 
     lines = cleaned.splitlines()
-    blocks: list[tuple[str | None, list[str]]] = []
-    current_heading: str | None = None
+
+    # Track active hierarchy
+    current_h1: str | None = None
+    current_h2: str | None = None
+    current_h3: str | None = None
+
+    tagged_sentences: list[tuple[str, str | None, str | None]] = []
     current_para_lines: list[str] = []
+
+    def flush_para(nearest: str | None, path: str | None):
+        if not current_para_lines:
+            return
+        para_text = " ".join(current_para_lines).strip()
+        current_para_lines.clear()
+        if not para_text:
+            return
+        sentences = _split_into_sentences(para_text, target_words, overlap_words)
+        for s in sentences:
+            tagged_sentences.append((s, nearest, path))
 
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            if current_para_lines:
-                para_text = " ".join(current_para_lines).strip()
-                if para_text:
-                    blocks.append((current_heading, _split_into_sentences(para_text, target_words, overlap_words)))
-                current_para_lines = []
+            h_near = current_h3 or current_h2 or current_h1
+            parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+            # Avoid repeating doc_title if it equals h1
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                parts.pop(0)
+            h_path = " > ".join(parts) if parts else h_near
+            flush_para(h_near, h_path)
             continue
 
-        heading = _extract_heading(stripped)
-        if heading:
-            if current_para_lines:
-                para_text = " ".join(current_para_lines).strip()
-                if para_text:
-                    blocks.append((current_heading, _split_into_sentences(para_text, target_words, overlap_words)))
-                current_para_lines = []
-            current_heading = heading
+        m_h1 = re.match(r"^#\s+(.+)$", stripped)
+        m_h2 = re.match(r"^##\s+(.+)$", stripped)
+        m_h3 = re.match(r"^###\s+(.+)$", stripped)
+        m_colon = re.match(r"^(?:(?:Section|Chapter|Part)\s+\d+[:\s]+|)([A-Z][A-Za-z0-9\s\-_/]{2,50}):$", stripped)
+
+        if m_h1:
+            h_near = current_h3 or current_h2 or current_h1
+            parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                parts.pop(0)
+            flush_para(h_near, " > ".join(parts) if parts else h_near)
+            current_h1 = m_h1.group(1).strip()
+            current_h2 = None
+            current_h3 = None
+        elif m_h2:
+            h_near = current_h3 or current_h2 or current_h1
+            parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                parts.pop(0)
+            flush_para(h_near, " > ".join(parts) if parts else h_near)
+            current_h2 = m_h2.group(1).strip()
+            current_h3 = None
+        elif m_h3:
+            h_near = current_h3 or current_h2 or current_h1
+            parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                parts.pop(0)
+            flush_para(h_near, " > ".join(parts) if parts else h_near)
+            current_h3 = m_h3.group(1).strip()
+        elif m_colon:
+            h_near = current_h3 or current_h2 or current_h1
+            parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+            if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+                parts.pop(0)
+            flush_para(h_near, " > ".join(parts) if parts else h_near)
+            current_h3 = m_colon.group(1).strip()
         else:
             current_para_lines.append(stripped)
 
-    if current_para_lines:
-        para_text = " ".join(current_para_lines).strip()
-        if para_text:
-            blocks.append((current_heading, _split_into_sentences(para_text, target_words, overlap_words)))
+    # Flush final paragraph
+    h_near = current_h3 or current_h2 or current_h1
+    parts = [p for p in [doc_title, current_h1, current_h2, current_h3] if p]
+    if len(parts) >= 2 and parts[0].lower() == parts[1].lower():
+        parts.pop(0)
+    flush_para(h_near, " > ".join(parts) if parts else h_near)
 
-    if not blocks:
-        return [{"content": cleaned, "section_title": None}]
+    if not tagged_sentences:
+        return [{"content": cleaned, "section_title": None, "heading_path": None}]
 
     chunks: list[dict[str, Any]] = []
-    current_chunk_sentences: list[str] = []
-    current_chunk_words = 0
-    current_chunk_heading: str | None = None
+    current_sentences: list[tuple[str, str | None, str | None]] = []
+    current_words = 0
 
-    for heading, sentences in blocks:
-        for sentence in sentences:
-            s_words = len(sentence.split())
-            if current_chunk_words + s_words > target_words and current_chunk_words >= min(100, target_words // 2):
-                chunk_str = " ".join(current_chunk_sentences).strip()
-                if chunk_str:
-                    chunks.append({
-                        "content": chunk_str,
-                        "section_title": current_chunk_heading,
-                    })
+    for item in tagged_sentences:
+        s_text, s_heading, s_path = item
+        s_words = len(s_text.split())
 
-                # Select overlap sentences from the end of the previous chunk
-                overlap_sents: list[str] = []
-                overlap_count = 0
-                for prev_sent in reversed(current_chunk_sentences):
-                    cnt = len(prev_sent.split())
-                    if overlap_count + cnt <= overlap_words or not overlap_sents:
-                        overlap_sents.insert(0, prev_sent)
-                        overlap_count += cnt
-                    else:
-                        break
+        if current_words + s_words > target_words and current_words >= min(100, target_words // 2):
+            chunk_content = " ".join(s[0] for s in current_sentences).strip()
+            first_sent = current_sentences[0]
+            if chunk_content:
+                chunks.append({
+                    "content": chunk_content,
+                    "section_title": first_sent[1],
+                    "heading_path": first_sent[2],
+                })
 
-                current_chunk_sentences = list(overlap_sents)
-                current_chunk_words = sum(len(s.split()) for s in current_chunk_sentences)
+            # Carry overlap from the end of the current chunk
+            overlap_items: list[tuple[str, str | None, str | None]] = []
+            overlap_count = 0
+            for prev_item in reversed(current_sentences):
+                cnt = len(prev_item[0].split())
+                if overlap_count + cnt <= overlap_words or not overlap_items:
+                    overlap_items.insert(0, prev_item)
+                    overlap_count += cnt
+                else:
+                    break
 
-            if not current_chunk_sentences:
-                current_chunk_heading = heading
-            elif heading and heading != current_chunk_heading and current_chunk_words < 100:
-                current_chunk_heading = heading
+            current_sentences = list(overlap_items)
+            current_words = sum(len(s[0].split()) for s in current_sentences)
 
-            current_chunk_sentences.append(sentence)
-            current_chunk_words += s_words
+        current_sentences.append(item)
+        current_words += s_words
 
-    if current_chunk_sentences:
-        chunk_str = " ".join(current_chunk_sentences).strip()
-        if chunk_str:
+    if current_sentences:
+        chunk_content = " ".join(s[0] for s in current_sentences).strip()
+        first_sent = current_sentences[0]
+        if chunk_content:
             chunks.append({
-                "content": chunk_str,
-                "section_title": current_chunk_heading,
+                "content": chunk_content,
+                "section_title": first_sent[1],
+                "heading_path": first_sent[2],
             })
 
-    return chunks or [{"content": cleaned, "section_title": None}]
+    return chunks or [{"content": cleaned, "section_title": None, "heading_path": None}]
+
 
 
 def chunk_text(text: str, chunk_size: int = 300, overlap: int = 50) -> list[str]:
@@ -243,46 +300,179 @@ def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     return max(0.0, min(1.0, float(dot)))
 
 
-# ── Hybrid Retrieval: BM25 & Reciprocal Rank Fusion ─────────────────────────
+# ── Hybrid Retrieval: BM25 & Weighted Rank Fusion ─────────────────────────
 
-def compute_bm25_scores(query: str, chunks: list[dict[str, Any]]) -> dict[str, float]:
-    """Compute pure-Python Okapi BM25 relevance scores (k1=1.5, b=0.75)."""
+STOPWORDS = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are",
+    "aren't", "as", "at", "be", "because", "been", "before", "being", "below", "between", "both",
+    "but", "by", "can", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't",
+    "doing", "don't", "down", "during", "each", "few", "for", "from", "further", "had", "hadn't",
+    "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here",
+    "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll",
+    "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's",
+    "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off", "on",
+    "once", "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own",
+    "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", "some",
+    "such", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then",
+    "there", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this",
+    "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we",
+    "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's",
+    "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with", "won't",
+    "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
+    "yourselves",
+    # Common conversational fillers and generic request words
+    "need", "needs", "needed", "want", "wants", "give", "tell", "show", "know", "how", "what",
+    "which", "who", "does", "explain", "describe", "guidelines", "guide", "tips", "tricks",
+    "best", "good", "great",
+}
+
+SINGLE_LETTER_KEEP = {"c", "r"}
+
+
+def tokenize_bm25(text: str) -> list[str]:
+    """Tokenize text into lowercase technical and linguistic tokens, dropping stopwords.
+
+    Preserves compound technical tokens such as 'ci/cd', 'fastapi', 'c++', 'c#', 'node.js', 'next.js'.
+    """
+    raw_tokens = re.findall(r"[a-z0-9]+(?:[./#+\-_][a-z0-9+#]+)+|[a-z0-9+#]+", text.lower())
+    tokens: list[str] = []
+    for t in raw_tokens:
+        t_clean = t.strip(".-_")
+        if not t_clean:
+            continue
+        if len(t_clean) == 1 and t_clean not in SINGLE_LETTER_KEEP:
+            continue
+        if t_clean in STOPWORDS:
+            continue
+        tokens.append(t_clean)
+    return tokens
+
+
+class BM25CorpusStats:
+    """Precomputed corpus-wide BM25 statistics for eligible chunks."""
+
+    def __init__(
+        self,
+        N: int,
+        avgdl: float,
+        df: dict[str, int],
+        doc_lengths: dict[str, int],
+    ):
+        self.N = N
+        self.avgdl = avgdl
+        self.df = df
+        self.doc_lengths = doc_lengths
+
+
+_bm25_corpus_cache: dict[str | None, BM25CorpusStats] = {}
+
+
+def invalidate_bm25_cache() -> None:
+    """Invalidate in-memory BM25 corpus statistics cache on ingest or delete."""
+    global _bm25_corpus_cache
+    _bm25_corpus_cache.clear()
+
+
+async def get_or_build_corpus_stats(user_id: str | None, db=None) -> BM25CorpusStats:
+    """Retrieve or compute cached BM25 corpus statistics across global + user scope."""
+    global _bm25_corpus_cache
+    cache_key = user_id
+    if cache_key in _bm25_corpus_cache:
+        return _bm25_corpus_cache[cache_key]
+
+    chunks_for_stats: list[dict[str, Any]] = []
+    if db is not None and hasattr(db, "rag_chunks"):
+        try:
+            scope_filter = {
+                "$or": [
+                    {"scope": "global"},
+                    {"user_id": user_id, "scope": {"$ne": "global"}},
+                ]
+            }
+            cursor = db.rag_chunks.find(
+                scope_filter,
+                {"_id": 1, "chunk_id": 1, "content": 1}
+            )
+            chunks_for_stats = await cursor.to_list(length=10000)
+        except Exception as exc:
+            logger.debug("Failed querying DB for BM25 corpus stats (%s); using in-memory", exc)
+            chunks_for_stats = []
+
+    if not chunks_for_stats:
+        for c in _offline_rag_chunks.values():
+            if c.get("scope") == "global" or c.get("user_id") == user_id:
+                chunks_for_stats.append(c)
+
+    N = len(chunks_for_stats)
+    if N == 0:
+        stats = BM25CorpusStats(N=0, avgdl=1.0, df={}, doc_lengths={})
+        _bm25_corpus_cache[cache_key] = stats
+        return stats
+
+    df: dict[str, int] = {}
+    doc_lengths: dict[str, int] = {}
+    total_len = 0
+
+    for c in chunks_for_stats:
+        cid = str(c.get("chunk_id", c.get("_id")))
+        tokens = tokenize_bm25(c.get("content", ""))
+        doc_len = len(tokens)
+        doc_lengths[cid] = doc_len
+        total_len += doc_len
+        for unique_t in set(tokens):
+            df[unique_t] = df.get(unique_t, 0) + 1
+
+    avgdl = total_len / max(1, N)
+    stats = BM25CorpusStats(N=N, avgdl=avgdl, df=df, doc_lengths=doc_lengths)
+    _bm25_corpus_cache[cache_key] = stats
+    return stats
+
+
+def compute_bm25_scores(
+    query: str,
+    chunks: list[dict[str, Any]],
+    corpus_stats: BM25CorpusStats | None = None,
+) -> dict[str, float]:
+    """Compute pure-Python Okapi BM25 relevance scores (k1=1.5, b=0.75).
+
+    When corpus_stats is supplied, IDF and avgdl are computed across the entire eligible corpus
+    (global + user chunks) rather than merely the candidate pool.
+    """
     if not chunks or not query:
         return {str(c.get("chunk_id", c.get("_id"))): 0.0 for c in chunks}
 
-    query_tokens = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 1]
+    query_tokens = tokenize_bm25(query)
     if not query_tokens:
         return {str(c.get("chunk_id", c.get("_id"))): 0.0 for c in chunks}
 
-    doc_tokens_list: list[list[str]] = []
-    chunk_ids: list[str] = []
-    for c in chunks:
-        cid = str(c.get("chunk_id", c.get("_id")))
-        chunk_ids.append(cid)
-        tokens = re.findall(r"\w+", c.get("content", "").lower())
-        doc_tokens_list.append(tokens)
-
-    N = len(chunks)
-    avgdl = sum(len(d) for d in doc_tokens_list) / max(1, N)
     k1 = 1.5
     b = 0.75
 
-    # Document frequency per query term
-    df: dict[str, int] = {}
-    for t in set(query_tokens):
-        df[t] = sum(1 for d in doc_tokens_list if t in d)
+    if corpus_stats is not None and corpus_stats.N > 0:
+        N = corpus_stats.N
+        avgdl = corpus_stats.avgdl
+        df_source = corpus_stats.df
+        len_source = corpus_stats.doc_lengths
+    else:
+        # Fallback to candidate-only if corpus_stats is unavailable
+        doc_tokens_list = [tokenize_bm25(c.get("content", "")) for c in chunks]
+        N = len(chunks)
+        avgdl = sum(len(d) for d in doc_tokens_list) / max(1, N)
+        df_source = {t: sum(1 for d in doc_tokens_list if t in d) for t in set(query_tokens)}
+        len_source = {str(c.get("chunk_id", c.get("_id"))): len(d) for c, d in zip(chunks, doc_tokens_list)}
 
     scores: dict[str, float] = {}
-    for cid, d_tokens in zip(chunk_ids, doc_tokens_list):
-        doc_len = len(d_tokens)
-        score = 0.0
+    for c in chunks:
+        cid = str(c.get("chunk_id", c.get("_id")))
+        d_tokens = tokenize_bm25(c.get("content", ""))
+        doc_len = len_source.get(cid, len(d_tokens))
         tf_dict: dict[str, int] = {}
         for t in d_tokens:
-            if t in df:
-                tf_dict[t] = tf_dict.get(t, 0) + 1
+            tf_dict[t] = tf_dict.get(t, 0) + 1
 
+        score = 0.0
         for q in query_tokens:
-            n_q = df.get(q, 0)
+            n_q = df_source.get(q, 0)
             if n_q == 0:
                 continue
             idf = math.log(1.0 + (N - n_q + 0.5) / (n_q + 0.5))
@@ -296,21 +486,112 @@ def compute_bm25_scores(query: str, chunks: list[dict[str, Any]]) -> dict[str, f
     return scores
 
 
+def weighted_rank_fusion(
+    vector_ranked_ids: list[str],
+    keyword_ranked_ids: list[str],
+    similarity_map: dict[str, float],
+    k: int = 60,
+    vector_weight: float | None = None,
+    keyword_weight: float | None = None,
+    cosine_bonus_weight: float = 0.02,
+) -> dict[str, float]:
+    """Compute Weighted Reciprocal Rank Fusion (RRF) with normalized cosine bonus.
+
+    Formula:
+        fused_score = (
+            vector_weight * (1.0 / (k + rank_vector))
+            + keyword_weight * (1.0 / (k + rank_keyword))
+            + cosine_bonus_weight * similarity
+        )
+
+    Where:
+        - k = 60 is the smoothing constant.
+        - vector_weight defaults to config.RAG_VECTOR_WEIGHT (0.7).
+        - keyword_weight defaults to config.RAG_KEYWORD_WEIGHT (0.3).
+        - cosine_bonus_weight adds a direct linear bonus from raw cosine similarity [0.0, 1.0]
+          ensuring a chunk with superior semantic alignment cannot be displaced to the bottom
+          by lexical matches on frequent query terms.
+    """
+    v_w = config.RAG_VECTOR_WEIGHT if vector_weight is None else vector_weight
+    k_w = config.RAG_KEYWORD_WEIGHT if keyword_weight is None else keyword_weight
+
+    all_ids = set(vector_ranked_ids) | set(keyword_ranked_ids)
+    v_ranks = {cid: rank for rank, cid in enumerate(vector_ranked_ids, start=1)}
+    k_ranks = {cid: rank for rank, cid in enumerate(keyword_ranked_ids, start=1)}
+
+    default_v_rank = len(vector_ranked_ids) + 1
+    default_k_rank = len(keyword_ranked_ids) + 1
+
+    fused: dict[str, float] = {}
+    for cid in all_ids:
+        r_v = v_ranks.get(cid, default_v_rank)
+        r_k = k_ranks.get(cid, default_k_rank)
+        sim = similarity_map.get(cid, 0.0)
+
+        rrf_v = v_w * (1.0 / (k + r_v))
+        rrf_k = k_w * (1.0 / (k + r_k))
+        bonus = cosine_bonus_weight * sim
+
+        fused[cid] = round(rrf_v + rrf_k + bonus, 6)
+
+    return fused
+
+
 def reciprocal_rank_fusion(
     vector_ranked_ids: list[str],
     keyword_ranked_ids: list[str],
     k: int = 60,
 ) -> dict[str, float]:
-    """Compute Reciprocal Rank Fusion (RRF) scores across vector and keyword rankings."""
-    rrf_scores: dict[str, float] = {}
+    """Backwards-compatible unweighted RRF wrapper."""
+    sim_dummy = {cid: 0.0 for cid in set(vector_ranked_ids) | set(keyword_ranked_ids)}
+    return weighted_rank_fusion(
+        vector_ranked_ids=vector_ranked_ids,
+        keyword_ranked_ids=keyword_ranked_ids,
+        similarity_map=sim_dummy,
+        k=k,
+        vector_weight=1.0,
+        keyword_weight=1.0,
+        cosine_bonus_weight=0.0,
+    )
 
-    for rank, cid in enumerate(vector_ranked_ids, start=1):
-        rrf_scores[cid] = rrf_scores.get(cid, 0.0) + (1.0 / (k + rank))
 
-    for rank, cid in enumerate(keyword_ranked_ids, start=1):
-        rrf_scores[cid] = rrf_scores.get(cid, 0.0) + (1.0 / (k + rank))
+# ── Metadata-Aware Query Analyzer ─────────────────────────────────────────
 
-    return {cid: round(score, 6) for cid, score in rrf_scores.items()}
+ROLE_PATTERNS = [
+    ("backend", re.compile(r"\b(backend|back-end|server-side)\b", re.IGNORECASE)),
+    ("frontend", re.compile(r"\b(frontend|front-end|client-side)\b", re.IGNORECASE)),
+    ("fullstack", re.compile(r"\b(fullstack|full-stack)\b", re.IGNORECASE)),
+    ("data_analyst", re.compile(r"\b(data analyst|data analytics|bi analyst|business intelligence)\b", re.IGNORECASE)),
+    ("data_scientist", re.compile(r"\b(data scientist|data science)\b", re.IGNORECASE)),
+    ("devops", re.compile(r"\b(devops|cloud engineer|site reliability|sre|platform engineer)\b", re.IGNORECASE)),
+    ("qa", re.compile(r"\b(qa|sdet|quality assurance|software test)\b", re.IGNORECASE)),
+    ("mobile", re.compile(r"\b(mobile|android|ios|flutter|react native)\b", re.IGNORECASE)),
+    ("ml_ai", re.compile(r"\b(machine learning|ml engineer|ai engineer|deep learning|llm|nlp)\b", re.IGNORECASE)),
+]
+
+SKILL_KEYWORDS = [
+    "python", "fastapi", "react", "typescript", "javascript", "docker", "sql", "git",
+    "ci/cd", "mongodb", "postgresql", "redis", "kubernetes", "aws", "azure", "gcp",
+]
+
+
+def analyze_query(query: str) -> dict[str, Any]:
+    """Analyze query to detect role intent and skill mentions for metadata boosting."""
+    detected_role: str | None = None
+    for role_name, pattern in ROLE_PATTERNS:
+        if pattern.search(query):
+            detected_role = role_name
+            break
+
+    q_lower = query.lower()
+    detected_skills = [s for s in SKILL_KEYWORDS if s in q_lower]
+
+    return {
+        "query": query,
+        "detected_role": detected_role,
+        "detected_skills": detected_skills,
+    }
+
 
 
 # ── Core Service Implementation ───────────────────────────────────────────
@@ -334,9 +615,22 @@ async def ingest_document(
 
     doc_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    raw_chunk_items = chunk_document(payload.content)
+    raw_chunk_items = chunk_document(payload.content, doc_title=payload.title)
     chunk_count = len(raw_chunk_items)
-    raw_texts = [item["content"] for item in raw_chunk_items]
+
+    # Prefix embedding text with "title | section" for enhanced semantic context
+    embed_texts: list[str] = []
+    for item in raw_chunk_items:
+        prefix = ""
+        doc_t = payload.title or ""
+        sec_t = item.get("heading_path") or item.get("section_title") or ""
+        if doc_t and sec_t:
+            prefix = f"{doc_t} | {sec_t}\n\n"
+        elif doc_t:
+            prefix = f"{doc_t}\n\n"
+        elif sec_t:
+            prefix = f"{sec_t}\n\n"
+        embed_texts.append(f"{prefix}{item['content']}")
 
     doc_data = {
         "_id": doc_id,
@@ -359,7 +653,7 @@ async def ingest_document(
     try:
         if not config.ALIBABA_CLOUD_API_KEY:
             raise AIConfigurationError("ALIBABA_CLOUD_API_KEY is not configured")
-        embeddings = await embedding_service.embed_texts(raw_texts)
+        embeddings = await embedding_service.embed_texts(embed_texts)
         if embeddings and len(embeddings[0]) > 0:
             dim = len(embeddings[0])
     except Exception as exc:
@@ -370,12 +664,13 @@ async def ingest_document(
         )
         model_name = "hash-256-fallback"
         dim = 256
-        embeddings = [compute_text_vector(t, vocab_dim=256) for t in raw_texts]
+        embeddings = [compute_text_vector(t, vocab_dim=256) for t in embed_texts]
 
+    role_val = (payload.metadata or {}).get("role", "general")
     chunks_data: list[dict[str, Any]] = []
     for idx, item in enumerate(raw_chunk_items):
         c_id = str(uuid.uuid4())
-        vec = embeddings[idx] if idx < len(embeddings) else compute_text_vector(item["content"], vocab_dim=256)
+        vec = embeddings[idx] if idx < len(embeddings) else compute_text_vector(embed_texts[idx], vocab_dim=256)
         chunks_data.append({
             "_id": c_id,
             "chunk_id": c_id,
@@ -383,9 +678,11 @@ async def ingest_document(
             "document_title": payload.title,
             "user_id": clean_user_id,
             "category": payload.category,
+            "role": role_val,
             "scope": clean_scope,
             "chunk_index": idx,
             "section_title": item.get("section_title"),
+            "heading_path": item.get("heading_path"),
             "content": item["content"],
             "embedding": vec,
             "embedding_model": model_name,
@@ -409,6 +706,10 @@ async def ingest_document(
         _offline_rag_docs[doc_id] = doc_data
         for cd in chunks_data:
             _offline_rag_chunks[cd["chunk_id"]] = cd
+
+    # Invalidate BM25 corpus statistics cache on ingest
+    invalidate_bm25_cache()
+
 
     return DocumentUploadResponse(
         document_id=doc_id,
@@ -498,7 +799,11 @@ async def delete_document(user_id: str, document_id: str, db=None) -> bool:
                 _offline_rag_chunks.pop(c_id, None)
             deleted = True
 
+    if deleted:
+        invalidate_bm25_cache()
+
     return deleted
+
 
 
 async def execute_vector_search(
@@ -588,8 +893,14 @@ async def retrieve_context(
     document_ids: list[str] | None = None,
     vector_index_name: str | None = None,
     db=None,
+    mode: str = "hybrid",
 ) -> ChunkSourceList:
     """Perform scoped hybrid retrieval (Atlas Vector Search + BM25 keyword fusion).
+
+    Modes:
+      - 'hybrid' (default): Atlas vector search + BM25 keyword fusion + cosine bonus + role boost.
+      - 'vector_only': Atlas vector search ranked purely by cosine similarity.
+      - 'bm25_only': BM25 keyword scoring over the eligible corpus.
 
     Searches current user's chunks PLUS global chunks. Cross-user isolation is strictly enforced.
     Drops candidate chunks whose cosine similarity falls below config.RAG_MIN_SIMILARITY.
@@ -599,6 +910,75 @@ async def retrieve_context(
         db = _get_db()
 
     target_top_k = min(10, max(1, top_k))
+
+    # Scope pre-filter: user chunks OR global chunks
+    scope_filter: dict[str, Any] = {
+        "$or": [
+            {"scope": "global"},
+            {"user_id": user_id, "scope": {"$ne": "global"}},
+        ]
+    }
+
+    # Handle bm25_only mode directly over eligible chunks
+    if mode == "bm25_only":
+        all_chunks: list[dict[str, Any]] = []
+        if db is not None and hasattr(db, "rag_chunks"):
+            try:
+                base_q = dict(scope_filter)
+                if category_filter:
+                    base_q["category"] = category_filter
+                if document_ids:
+                    base_q["document_id"] = {"$in": document_ids}
+                cursor = db.rag_chunks.find(base_q)
+                all_chunks = await cursor.to_list(length=2000)
+            except Exception:
+                all_chunks = []
+
+        if not all_chunks:
+            for c in _offline_rag_chunks.values():
+                is_global = c.get("scope") == "global"
+                is_user = c.get("user_id") == user_id
+                if not (is_global or is_user):
+                    continue
+                if category_filter and c.get("category") != category_filter:
+                    continue
+                if document_ids and c.get("document_id") not in document_ids:
+                    continue
+                all_chunks.append(c)
+
+        corpus_stats = await get_or_build_corpus_stats(user_id=user_id, db=db)
+        bm25_scores = compute_bm25_scores(query, all_chunks, corpus_stats=corpus_stats)
+        scored = [
+            (bm25_scores.get(str(c.get("chunk_id", c.get("_id"))), 0.0), str(c.get("chunk_id", c.get("_id"))), c)
+            for c in all_chunks
+            if bm25_scores.get(str(c.get("chunk_id", c.get("_id"))), 0.0) > 0.0
+        ]
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        top_items = scored[:target_top_k]
+        if not top_items:
+            return ChunkSourceList([], status="no_context", retrieval_backend="bm25")
+
+        sources = [
+            ChunkSource(
+                chunk_id=cid,
+                document_id=str(c.get("document_id")),
+                document_title=str(c.get("document_title", "Doc")),
+                chunk_index=int(c.get("chunk_index", 0)),
+                content=str(c.get("content", "")),
+                similarity_score=0.0,
+                similarity=0.0,
+                keyword_score=round(score, 4),
+                fused_score=round(score, 6),
+                rank=r,
+                category=str(c.get("category", "general")),
+                role=c.get("role"),
+                scope=str(c.get("scope", "user")),
+                section_title=c.get("section_title"),
+                heading_path=c.get("heading_path"),
+            )
+            for r, (score, cid, c) in enumerate(top_items, start=1)
+        ]
+        return ChunkSourceList(sources, status="grounded", retrieval_backend="bm25")
 
     # 1. Compute query vector
     query_vec: list[float] = []
@@ -630,6 +1010,7 @@ async def retrieve_context(
 
     # 3. Retrieve Vector Candidates (Atlas $vectorSearch or in-memory fallback)
     vector_candidates: list[dict[str, Any]] = []
+    retrieval_backend = "atlas"
 
     if db is not None and hasattr(db, RAG_CHUNKS_COLLECTION):
         try:
@@ -644,14 +1025,16 @@ async def retrieve_context(
                 db=db,
             )
         except Exception as exc:
-            logger.debug(
-                "Atlas $vectorSearch not available (%s); using in-memory cosine fallback",
+            logger.warning(
+                "Atlas $vectorSearch not available (%s); falling back to in-memory cosine search",
                 type(exc).__name__,
             )
             vector_candidates = []
 
     # If $vectorSearch is unavailable or returned empty, perform in-memory cosine fallback
     if not vector_candidates:
+        retrieval_backend = "memory"
+        logger.warning("Atlas vector search unavailable or empty; falling back to in-memory search")
         fallback_chunks: list[dict[str, Any]] = []
         if db is not None and hasattr(db, "rag_chunks"):
             try:
@@ -732,9 +1115,9 @@ async def retrieve_context(
         candidate_dict[cid] = c
 
     if not candidate_dict:
-        return ChunkSourceList([], status="no_context")
+        return ChunkSourceList([], status="no_context", retrieval_backend=retrieval_backend)
 
-    # 6. Compute exact cosine similarity and apply RAG_MIN_SIMILARITY threshold
+    # 6. Compute exact cosine similarity and apply weak relevance threshold
     filtered_candidates: dict[str, dict[str, Any]] = {}
     similarity_map: dict[str, float] = {}
 
@@ -759,60 +1142,103 @@ async def retrieve_context(
                 continue
 
         sim = cosine_similarity(query_vec, c_vec)
-        # Drop candidates below minimum relevance threshold
-        threshold = 0.05 if query_model == "hash-256-fallback" else config.RAG_MIN_SIMILARITY
+        # Drop candidates below weak relevance threshold (or 0.05 for hash fallback)
+        threshold = 0.05 if query_model == "hash-256-fallback" else config.RAG_WEAK_SIMILARITY
         if sim >= threshold:
             similarity_map[cid] = sim
             filtered_candidates[cid] = c
 
     if not filtered_candidates:
-        return ChunkSourceList([], status="no_context")
+        return ChunkSourceList([], status="no_context", retrieval_backend=retrieval_backend)
+
+    if mode == "vector_only":
+        sorted_cids = sorted(
+            similarity_map.keys(),
+            key=lambda x: (-similarity_map[x], x),
+        )
+        top_cids = sorted_cids[:target_top_k]
+        has_grounded = any(similarity_map[cid] >= config.RAG_MIN_SIMILARITY for cid in top_cids)
+        status = "grounded" if has_grounded else "weak"
+        sources = [
+            ChunkSource(
+                chunk_id=cid,
+                document_id=str(filtered_candidates[cid].get("document_id")),
+                document_title=str(filtered_candidates[cid].get("document_title", "Doc")),
+                chunk_index=int(filtered_candidates[cid].get("chunk_index", 0)),
+                content=str(filtered_candidates[cid].get("content", "")),
+                similarity_score=round(similarity_map[cid], 4),
+                similarity=round(similarity_map[cid], 4),
+                keyword_score=0.0,
+                fused_score=round(similarity_map[cid], 6),
+                rank=r,
+                category=str(filtered_candidates[cid].get("category", "general")),
+                role=filtered_candidates[cid].get("role"),
+                scope=str(filtered_candidates[cid].get("scope", "user")),
+                section_title=filtered_candidates[cid].get("section_title"),
+                heading_path=filtered_candidates[cid].get("heading_path"),
+            )
+            for r, cid in enumerate(top_cids, start=1)
+        ]
+        return ChunkSourceList(sources, status=status, retrieval_backend=retrieval_backend)
 
     surviving_chunks = list(filtered_candidates.values())
 
-    # 7. Compute BM25 keyword relevance scores
-    bm25_scores = compute_bm25_scores(query, surviving_chunks)
+    # 7. Compute BM25 keyword relevance scores across whole eligible corpus
+    corpus_stats = await get_or_build_corpus_stats(user_id=user_id, db=db)
+    bm25_scores = compute_bm25_scores(query, surviving_chunks, corpus_stats=corpus_stats)
 
-    # 8. Reciprocal Rank Fusion (k=60)
-    # Sort for vector rank: descending similarity, tie-break by cid
+    # 8. Weighted Rank Fusion (k=60) with cosine similarity bonus
     vector_ranked_ids = sorted(
         similarity_map.keys(),
         key=lambda x: (similarity_map[x], x),
         reverse=True,
     )
-    # Sort for keyword rank: descending BM25, tie-break by cid
     keyword_ranked_ids = sorted(
         similarity_map.keys(),
         key=lambda x: (bm25_scores.get(x, 0.0), x),
         reverse=True,
     )
 
-    rrf_scores = reciprocal_rank_fusion(
+    fused_scores = weighted_rank_fusion(
         vector_ranked_ids=vector_ranked_ids,
         keyword_ranked_ids=keyword_ranked_ids,
+        similarity_map=similarity_map,
         k=60,
+        vector_weight=config.RAG_VECTOR_WEIGHT,
+        keyword_weight=config.RAG_KEYWORD_WEIGHT,
+        cosine_bonus_weight=0.02,
     )
 
-    # 9. Final deterministic sort: fused_score desc, similarity desc, cid asc
+    # 9. Metadata-Aware Query Analyzer: Role Boost
+    query_analysis = analyze_query(query)
+    detected_role = query_analysis.get("detected_role")
+    if detected_role:
+        for cid in similarity_map.keys():
+            c = filtered_candidates[cid]
+            c_role = c.get("role")
+            if c_role and c_role.lower() == detected_role.lower():
+                fused_scores[cid] = round(fused_scores[cid] * config.RAG_ROLE_BOOST_FACTOR, 6)
+
+    # 10. Final deterministic sort: fused_score desc, similarity desc, cid asc
     sorted_cids = sorted(
         similarity_map.keys(),
-        key=lambda x: (-rrf_scores.get(x, 0.0), -similarity_map[x], x),
+        key=lambda x: (-fused_scores.get(x, 0.0), -similarity_map[x], x),
     )
 
     top_cids = sorted_cids[:target_top_k]
 
-    # 10. Determine retrieval confidence status
-    has_strong_chunk = any(
-        similarity_map[cid] >= config.RAG_STRONG_SIMILARITY for cid in top_cids
+    # 11. Determine retrieval confidence status (grounded vs weak)
+    has_grounded_chunk = any(
+        similarity_map[cid] >= config.RAG_MIN_SIMILARITY for cid in top_cids
     )
-    status = "grounded" if has_strong_chunk else "weak"
+    status = "grounded" if has_grounded_chunk else "weak"
 
     sources: list[ChunkSource] = []
     for rank, cid in enumerate(top_cids, start=1):
         c = filtered_candidates[cid]
         sim = similarity_map[cid]
         kw = bm25_scores.get(cid, 0.0)
-        fused = rrf_scores.get(cid, 0.0)
+        fused = fused_scores.get(cid, 0.0)
 
         sources.append(
             ChunkSource(
@@ -827,12 +1253,15 @@ async def retrieve_context(
                 fused_score=round(fused, 6),
                 rank=rank,
                 category=str(c.get("category", "general")),
+                role=c.get("role"),
                 scope=str(c.get("scope", "user")),
                 section_title=c.get("section_title"),
+                heading_path=c.get("heading_path"),
             )
         )
 
-    return ChunkSourceList(sources, status=status)
+    return ChunkSourceList(sources, status=status, retrieval_backend=retrieval_backend)
+
 
 
 async def grounded_chat(

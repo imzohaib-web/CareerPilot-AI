@@ -22,10 +22,12 @@ from app.schemas.rag import KnowledgeBaseStats
 from app.services.ai import embedding_service
 from app.services.ai.qwen_service import AIConfigurationError
 from app.services.rag_service import (
+    CHUNKER_VERSION,
     _offline_rag_chunks,
     _offline_rag_docs,
     chunk_document,
     compute_text_vector,
+    invalidate_bm25_cache,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,8 +101,8 @@ def parse_knowledge_file(file_path: Path) -> dict[str, Any] | None:
     role = str(metadata.get("role") or "general")
     source_note = str(metadata.get("source_note") or "")
 
-    # SHA-256 content hash covering both front matter and body
-    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    # SHA-256 content hash covering chunker version, front matter, and body
+    content_hash = hashlib.sha256(f"{CHUNKER_VERSION}:{content}".encode("utf-8")).hexdigest()
 
     return {
         "file_name": file_path.name,
@@ -116,22 +118,34 @@ def parse_knowledge_file(file_path: Path) -> dict[str, Any] | None:
 
 async def _compute_embeddings(
     raw_chunk_items: list[dict[str, Any]],
+    doc_title: str | None = None,
     use_hash_fallback: bool = False,
 ) -> tuple[list[list[float]], str, int]:
-    """Compute embeddings for a batch of chunk strings, respecting test mocks and offline fallbacks."""
-    raw_texts = [item["content"] for item in raw_chunk_items]
-    if not raw_texts:
+    """Compute embeddings for a batch of chunk strings, prefixed with title and section for context."""
+    embed_texts: list[str] = []
+    for c in raw_chunk_items:
+        prefix = ""
+        doc_t = doc_title or ""
+        sec_t = c.get("heading_path") or c.get("section_title") or ""
+        if doc_t and sec_t:
+            prefix = f"{doc_t} | {sec_t}\n\n"
+        elif doc_t:
+            prefix = f"{doc_t}\n\n"
+        elif sec_t:
+            prefix = f"{sec_t}\n\n"
+        embed_texts.append(f"{prefix}{c['content']}")
+
+    if not embed_texts:
         return [], "hash-256-fallback", 256
 
     if use_hash_fallback:
-        return [compute_text_vector(t, vocab_dim=256) for t in raw_texts], "hash-256-fallback", 256
+        return [compute_text_vector(t, vocab_dim=256) for t in embed_texts], "hash-256-fallback", 256
 
     model_name = config.EMBEDDING_MODEL
     dim = config.EMBEDDING_DIMENSIONS
     embeddings: list[list[float]] = []
 
     try:
-        # Check if embed_texts was mocked (e.g. in test assertions) or if API key is present
         is_mocked = (
             isinstance(embedding_service.embed_texts, (unittest.mock.Mock, unittest.mock.AsyncMock))
             or hasattr(embedding_service.embed_texts, "assert_called")
@@ -141,16 +155,17 @@ async def _compute_embeddings(
         if not config.ALIBABA_CLOUD_API_KEY and not is_mocked:
             raise AIConfigurationError("ALIBABA_CLOUD_API_KEY is not configured")
 
-        embeddings = await embedding_service.embed_texts(raw_texts)
+        embeddings = await embedding_service.embed_texts(embed_texts)
         if embeddings and len(embeddings[0]) > 0:
             dim = len(embeddings[0])
     except Exception as exc:
         logger.debug("Embedding service unconfigured or failed (%s); using hash-256 fallback", exc)
         model_name = "hash-256-fallback"
         dim = 256
-        embeddings = [compute_text_vector(t, vocab_dim=256) for t in raw_texts]
+        embeddings = [compute_text_vector(t, vocab_dim=256) for t in embed_texts]
 
     return embeddings, model_name, dim
+
 
 
 async def seed_knowledge(
@@ -240,9 +255,9 @@ async def seed_knowledge(
                             continue
 
                     # Chunk and generate embeddings
-                    raw_chunks = chunk_document(doc_info["body"])
+                    raw_chunks = chunk_document(doc_info["body"], doc_title=doc_info["title"])
                     embeddings, model_name, dim = await _compute_embeddings(
-                        raw_chunks, use_hash_fallback=use_hash_fallback
+                        raw_chunks, doc_title=doc_info["title"], use_hash_fallback=use_hash_fallback
                     )
 
                     doc_metadata = {
@@ -269,9 +284,11 @@ async def seed_knowledge(
                                 "document_title": doc_info["title"],
                                 "user_id": None,
                                 "category": doc_info["category"],
+                                "role": doc_info["role"],
                                 "scope": "global",
                                 "chunk_index": idx,
                                 "section_title": item.get("section_title"),
+                                "heading_path": item.get("heading_path"),
                                 "content": item["content"],
                                 "embedding": vec,
                                 "embedding_model": model_name,
@@ -311,9 +328,11 @@ async def seed_knowledge(
                                 "document_title": doc_info["title"],
                                 "user_id": None,
                                 "category": doc_info["category"],
+                                "role": doc_info["role"],
                                 "scope": "global",
                                 "chunk_index": idx,
                                 "section_title": item.get("section_title"),
+                                "heading_path": item.get("heading_path"),
                                 "content": item["content"],
                                 "embedding": vec,
                                 "embedding_model": model_name,
@@ -352,6 +371,15 @@ async def seed_knowledge(
                         removed_count += 1
                         logger.info("Pruned orphaned knowledge base document: %s (%s)", d_id, fn)
 
+                # Delete orphaned global chunks not belonging to any active document
+                if active_doc_ids:
+                    orphan_res = await db.rag_chunks.delete_many({
+                        "scope": "global",
+                        "document_id": {"$nin": list(active_doc_ids)},
+                    })
+                    if orphan_res.deleted_count > 0:
+                        logger.info("Pruned %d orphaned global chunks", orphan_res.deleted_count)
+
                 # Persist seeder status metadata
                 try:
                     await db.system_settings.update_one(
@@ -382,9 +410,9 @@ async def seed_knowledge(
                             skipped_count += 1
                             continue
 
-                    raw_chunks = chunk_document(doc_info["body"])
+                    raw_chunks = chunk_document(doc_info["body"], doc_title=doc_info["title"])
                     embeddings, model_name, dim = await _compute_embeddings(
-                        raw_chunks, use_hash_fallback=use_hash_fallback
+                        raw_chunks, doc_title=doc_info["title"], use_hash_fallback=use_hash_fallback
                     )
 
                     doc_metadata = {
@@ -417,9 +445,11 @@ async def seed_knowledge(
                                 "document_title": doc_info["title"],
                                 "user_id": None,
                                 "category": doc_info["category"],
+                                "role": doc_info["role"],
                                 "scope": "global",
                                 "chunk_index": idx,
                                 "section_title": item.get("section_title"),
+                                "heading_path": item.get("heading_path"),
                                 "content": item["content"],
                                 "embedding": vec,
                                 "embedding_model": model_name,
@@ -457,9 +487,11 @@ async def seed_knowledge(
                                 "document_title": doc_info["title"],
                                 "user_id": None,
                                 "category": doc_info["category"],
+                                "role": doc_info["role"],
                                 "scope": "global",
                                 "chunk_index": idx,
                                 "section_title": item.get("section_title"),
+                                "heading_path": item.get("heading_path"),
                                 "content": item["content"],
                                 "embedding": vec,
                                 "embedding_model": model_name,
@@ -500,12 +532,23 @@ async def seed_knowledge(
                             removed_count += 1
                             logger.info("Pruned orphaned offline knowledge document: %s (%s)", d_id, fn)
 
+                if active_doc_ids:
+                    to_del_chunks = [
+                        c_id for c_id, c in _offline_rag_chunks.items()
+                        if c.get("scope") == "global" and c.get("document_id") not in active_doc_ids
+                    ]
+                    for c_id in to_del_chunks:
+                        _offline_rag_chunks.pop(c_id, None)
+
             _last_seeded_at = now
 
             total_docs = len(active_doc_ids)
             total_chunks = len([
                 c for c in _offline_rag_chunks.values() if c.get("scope") == "global"
             ]) if not use_db else await db.rag_chunks.count_documents({"scope": "global"})
+
+            # Invalidate BM25 corpus statistics cache after seeding
+            invalidate_bm25_cache()
 
             logger.info(
                 "Knowledge base seeding complete: %d seeded, %d updated, %d skipped, %d pruned.",
@@ -528,6 +571,7 @@ async def seed_knowledge(
                 "total_chunks": total_chunks,
                 "last_seeded_at": now.isoformat(),
             }
+
 
         finally:
             _is_seeding = False
