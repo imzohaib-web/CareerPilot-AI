@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
@@ -21,6 +21,15 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [retrySeconds, setRetrySeconds] = useState<number>(0)
+
+  useEffect(() => {
+    if (retrySeconds <= 0) return
+    const timer = setInterval(() => {
+      setRetrySeconds((prev) => Math.max(0, prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [retrySeconds])
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />
@@ -28,13 +37,18 @@ export function LoginPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (retrySeconds > 0) return
     setError(null)
     setIsSubmitting(true)
     try {
       await login(email, password)
       navigate('/', { replace: true })
     } catch (err) {
-      setError(describeApiError(err).message)
+      const errInfo = describeApiError(err)
+      setError(errInfo.message)
+      if (errInfo.retryAfter && errInfo.retryAfter > 0) {
+        setRetrySeconds(errInfo.retryAfter)
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -102,13 +116,18 @@ export function LoginPage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full btn-primary text-xs py-2 px-4"
+            disabled={isSubmitting || retrySeconds > 0}
+            className="w-full btn-primary text-xs py-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                 <span>Signing in…</span>
+              </>
+            ) : retrySeconds > 0 ? (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Retry in {retrySeconds}s</span>
               </>
             ) : (
               <>

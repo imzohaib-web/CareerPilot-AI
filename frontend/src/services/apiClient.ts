@@ -36,7 +36,9 @@ export function describeApiError(error: unknown): {
     | 'authentication'
     | 'ai-provider'
     | 'server'
+    | 'rate-limit'
   message: string
+  retryAfter?: number
 } {
   if (error instanceof AxiosError) {
     if (!error.response) {
@@ -47,6 +49,46 @@ export function describeApiError(error: unknown): {
     }
     const status = error.response.status
     const detail = extractDetail(error.response.data)
+
+    if (status === 429) {
+      const headers = error.response.headers
+      const rawRetry =
+        headers?.['retry-after'] ||
+        (typeof headers?.get === 'function' ? headers.get('retry-after') : undefined)
+      let retryAfterSec: number | undefined
+      if (rawRetry) {
+        const parsed = parseInt(String(rawRetry), 10)
+        if (!isNaN(parsed) && parsed > 0) {
+          retryAfterSec = parsed
+        }
+      }
+
+      const resetAt = (error.response.data as { reset_at?: string })?.reset_at
+      let timeNotice = ''
+      if (retryAfterSec) {
+        if (retryAfterSec < 60) {
+          timeNotice = ` Please wait ${retryAfterSec}s before retrying.`
+        } else {
+          const minutes = Math.ceil(retryAfterSec / 60)
+          timeNotice = ` Please wait ${minutes} minute${minutes > 1 ? 's' : ''} before retrying.`
+        }
+      } else if (resetAt) {
+        try {
+          const resetDate = new Date(resetAt)
+          timeNotice = ` Limit resets at ${resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+        } catch {
+          // ignore date parse issues
+        }
+      }
+
+      const baseMessage = detail ?? 'Too many requests. Rate limit reached.'
+      return {
+        category: 'rate-limit',
+        message: `${baseMessage}${timeNotice}`,
+        retryAfter: retryAfterSec,
+      }
+    }
+
     if (status === 401) {
       return { category: 'authentication', message: detail ?? 'Authentication failed.' }
     }
