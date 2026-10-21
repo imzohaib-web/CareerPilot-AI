@@ -99,6 +99,7 @@ async def grounded_chat(
             message=payload.message,
             top_k=payload.top_k,
             document_ids=payload.document_ids,
+            allow_general_knowledge=payload.allow_general_knowledge,
         )
     except Exception as exc:
         logger.exception("Failed to execute RAG chat for user %s", user_id)

@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
+from app.schemas.rag import CitationRef
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -48,6 +49,9 @@ class InterviewFeedback(BaseModel):
     )
     recommended_actions: list[str] = Field(
         default_factory=list, description="Concrete next steps to prepare for real interviews"
+    )
+    rubric_sources: list[CitationRef] = Field(
+        default_factory=list, description="Referenced interview rubrics and benchmark guides"
     )
 
 

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from app.schemas.rag import CitationRef
 from pydantic import BaseModel, Field, field_validator
 
 # Hard limit on a single user message (chars).  Keeps prompts bounded and
@@ -51,6 +52,9 @@ class MentorChatResponse(BaseModel):
     conversation_id: str
     message: ChatMessage
     model: str
+    citations: list[CitationRef] = Field(
+        default_factory=list, description="Referenced knowledge base sources"
+    )
 
 
 class MentorHistoryResponse(BaseModel):

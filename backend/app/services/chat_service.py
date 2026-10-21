@@ -81,7 +81,41 @@ async def send_message(
     resume = _parse_resume_analysis(resume_doc)
     history = _build_model_history(conversation_doc)
 
-    reply, model = await ask_mentor(message, profile_doc, resume, history)
+    citations = []
+    rag_sources = []
+    try:
+        from app.services import rag_service
+        target_role = (profile_doc.get("target_role") if profile_doc else None) or None
+        chunks = await rag_service.retrieve_for_mentor(
+            message=message,
+            role=target_role,
+            top_k=3,
+            user_id=str(oid),
+            db=get_db(),
+        )
+        if chunks:
+            rag_sources = chunks
+            citations = [
+                rag_service.chunk_to_citation(c, idx)
+                for idx, c in enumerate(chunks, 1)
+            ]
+    except Exception as exc:
+        logger.warning("RAG retrieval for mentor chat failed gracefully (%s)", exc)
+        rag_sources = []
+        citations = []
+
+    reply, model = await ask_mentor(message, profile_doc, resume, history, sources=rag_sources)
+
+    # Post-validate citations if the model used bracket references e.g. [1]
+    if rag_sources and citations:
+        try:
+            from app.services.rag_service import parse_and_validate_citations
+            cleaned_reply, validated_cites = parse_and_validate_citations(reply, rag_sources)
+            if validated_cites:
+                reply = cleaned_reply
+                citations = validated_cites
+        except Exception:
+            pass
 
     # Persist both messages atomically and return the (possibly truncated)
     # stored content so the client and the stored history stay consistent.
@@ -102,6 +136,7 @@ async def send_message(
         conversation_id=conv_id,
         message=ChatMessage(role="assistant", content=stored_reply, created_at=now),
         model=model,
+        citations=citations,
     )
 
 

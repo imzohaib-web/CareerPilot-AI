@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
+from app.schemas.rag import CitationRef
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -17,6 +18,9 @@ class RoadmapTask(BaseModel):
     resource: str = Field(default="", description="Recommended tutorial, doc, or practice resource")
     milestone: str = Field(default="", description="Deliverable or proof of completion")
     estimated_hours: int = Field(default=5, ge=0, description="Estimated hours to complete")
+    source_refs: list[str] = Field(
+        default_factory=list, description="Referenced official documentation or tutorial sources"
+    )
 
 
 class RoadmapPhase(BaseModel):
@@ -74,6 +78,9 @@ class RoadmapResponse(BaseModel):
     weekly_hours: int
     roadmap: RoadmapContent
     completed_tasks: list[str] = Field(default_factory=list)
+    sources: list[CitationRef] = Field(
+        default_factory=list, description="Referenced curriculum learning sources"
+    )
     created_at: datetime
 
 

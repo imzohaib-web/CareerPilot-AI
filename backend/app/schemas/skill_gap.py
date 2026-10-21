@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from app.schemas.rag import CitationRef
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -56,4 +57,7 @@ class SkillGapResponse(BaseModel):
     target_role: str
     target_job_description: str
     analysis: SkillGapAnalysis
+    sources: list[CitationRef] = Field(
+        default_factory=list, description="Referenced industry skill matrix sources"
+    )
     created_at: datetime

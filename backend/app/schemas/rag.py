@@ -86,18 +86,38 @@ class RetrievalResult(BaseModel):
 
 
 
+class CitationRef(BaseModel):
+    id: int = Field(..., description="1-based citation index matching [1], [2] in answer text")
+    source_id: str = Field(default="", description="Chunk or document identifier")
+    document_title: str = Field(default="Untitled", description="Title of the cited document")
+    section_title: str | None = Field(default=None, description="Section heading")
+    heading_path: str | None = Field(default=None, description="Breadcrumb heading path")
+    snippet: str = Field(default="", description="Relevant snippet of chunk content")
+    similarity: float = Field(default=0.0, description="Cosine similarity score")
+    scope: str = Field(default="global", description="Scope: global or user")
+
+
 class RAGChatRequest(BaseModel):
     message: str = Field(..., min_length=2, description="User question for RAG grounded advisor")
     top_k: int = Field(default=5, ge=1, le=10, description="Number of context chunks to retrieve")
     document_ids: list[str] | None = Field(default=None, description="Optional document ID scoping")
+    allow_general_knowledge: bool = Field(default=False, description="Allow falling back to general model knowledge")
 
 
 class RAGChatResponse(BaseModel):
     reply: str
-    sources: list[ChunkSource]
+    answer: str = Field(default="", description="Grounded answer text (same as reply)")
+    sources: list[ChunkSource] = Field(default_factory=list, description="All retrieved context chunks")
+    citations: list[CitationRef] = Field(default_factory=list, description="Validated citations referenced in the answer")
     model_used: str
     status: Literal["grounded", "weak", "no_context"] = Field(
         default="grounded", description="Retrieval confidence status"
+    )
+    retrieval_status: Literal["grounded", "weak", "no_context"] = Field(
+        default="grounded", description="Retrieval confidence status (alias)"
+    )
+    used_general_knowledge: bool = Field(
+        default=False, description="Whether outside general knowledge was utilized"
     )
 
 
