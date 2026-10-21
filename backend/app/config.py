@@ -101,3 +101,36 @@ CORS_ORIGINS = _parse_origins(FRONTEND_ORIGIN)
 
 # --- Resume upload ---
 RESUME_MAX_SIZE_BYTES = int(os.getenv("RESUME_MAX_SIZE_MB", "5")) * 1024 * 1024
+
+# --- Rate Limiting & Abuse Prevention ---
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+RATE_LIMIT_STORAGE_URI = os.getenv("RATE_LIMIT_STORAGE_URI", None)
+TRUSTED_PROXY = os.getenv("TRUSTED_PROXY", "true").lower() == "true"
+
+# Auth Limits
+AUTH_LOGIN_RATE_LIMIT = os.getenv("AUTH_LOGIN_RATE_LIMIT", "5/minute")
+AUTH_LOGIN_RATE_LIMIT_HOUR = os.getenv("AUTH_LOGIN_RATE_LIMIT_HOUR", "20/hour")
+AUTH_LOGIN_MAX_FAILED_ATTEMPTS = int(os.getenv("AUTH_LOGIN_MAX_FAILED_ATTEMPTS", "10"))
+AUTH_LOGIN_LOCKOUT_MINUTES = int(os.getenv("AUTH_LOGIN_LOCKOUT_MINUTES", "15"))
+AUTH_REGISTER_RATE_LIMIT = os.getenv("AUTH_REGISTER_RATE_LIMIT", "3/hour")
+
+# AI Quotas & Limits
+AI_HIGH_COST_PER_MINUTE = int(os.getenv("AI_HIGH_COST_PER_MINUTE", "6"))
+AI_HIGH_COST_DAILY_LIMIT = int(os.getenv("AI_HIGH_COST_DAILY_LIMIT", "40"))
+
+AI_MEDIUM_COST_PER_MINUTE = int(os.getenv("AI_MEDIUM_COST_PER_MINUTE", "20"))
+AI_MEDIUM_COST_DAILY_LIMIT = int(os.getenv("AI_MEDIUM_COST_DAILY_LIMIT", "200"))
+
+AI_LOW_COST_PER_MINUTE = int(os.getenv("AI_LOW_COST_PER_MINUTE", "30"))
+RAG_MAX_DOCUMENTS_PER_USER = int(os.getenv("RAG_MAX_DOCUMENTS_PER_USER", "20"))
+RAG_MAX_TEXT_BYTES_PER_USER = int(os.getenv("RAG_MAX_TEXT_BYTES_PER_USER", str(2 * 1024 * 1024)))
+
+# Global Circuit Breaker
+GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "120"))
+
+# Demo Account Bypass (comma-separated emails with 5x limit multiplier)
+ALLOWED_DEMO_USERS = [
+    e.strip().lower()
+    for e in os.getenv("ALLOWED_DEMO_USERS", "").split(",")
+    if e.strip()
+]

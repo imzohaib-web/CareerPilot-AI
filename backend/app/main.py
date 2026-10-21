@@ -4,7 +4,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -29,11 +29,35 @@ async def lifespan(app: FastAPI):
     await connect_db()
     # Non-blocking startup seeding of curated knowledge base (background task)
     asyncio.create_task(seed_knowledge_background())
+
+    # Create rate limiting and abuse prevention indexes
+    try:
+        db = get_db()
+        if hasattr(db, "usage_counters"):
+            await db.usage_counters.create_index("created_at", expireAfterSeconds=259200)
+            await db.usage_counters.create_index([("user_id", 1), ("date", 1)], unique=True)
+        if hasattr(db, "login_attempts"):
+            await db.login_attempts.create_index("created_at", expireAfterSeconds=1800)
+            await db.login_attempts.create_index("email", unique=True)
+    except Exception as exc:
+        logger.debug("Rate limit indexes skipped or pending connection: %s", exc)
+
     yield
     await close_db()
 
 
 app = FastAPI(title="CareerPilot AI API", lifespan=lifespan)
+
+# Attach SlowAPI Limiter to application state
+from app.core.rate_limit import (
+    AccountLockoutException,
+    CircuitBreakerExceeded,
+    DailyQuotaExceeded,
+    RateLimitExceeded,
+    limiter,
+)
+
+app.state.limiter = limiter
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +83,7 @@ app.include_router(chat.router)
 
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Report API health and MongoDB connectivity (lightweight ping)."""
+    """Report API health and MongoDB connectivity (lightweight ping). Never rate limited."""
     database = "connected"
     try:
         # Throttled reconnect attempt — no-op when already connected. A
@@ -70,6 +94,52 @@ async def health_check() -> dict:
     except Exception:
         database = "disconnected"
     return {"status": "ok", "database": database}
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Return standard sanitized JSON shape for slowapi rate limits with Retry-After header."""
+    detail = f"Rate limit exceeded: {exc.detail}"
+    response = JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": detail},
+    )
+    view_rate_limit = getattr(request.state, "view_rate_limit", None)
+    if view_rate_limit:
+        response = limiter._inject_headers(response, view_rate_limit) or response
+    else:
+        response.headers["Retry-After"] = "60"
+    return response
+
+
+@app.exception_handler(DailyQuotaExceeded)
+async def daily_quota_handler(request: Request, exc: DailyQuotaExceeded) -> JSONResponse:
+    """Return 429 with detail and reset_at when daily AI budget is exceeded."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": exc.detail, "reset_at": exc.reset_at},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
+@app.exception_handler(AccountLockoutException)
+async def account_lockout_handler(request: Request, exc: AccountLockoutException) -> JSONResponse:
+    """Return 429 with generic detail when repeated failed logins trigger lockout."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": exc.detail},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
+@app.exception_handler(CircuitBreakerExceeded)
+async def circuit_breaker_handler(request: Request, exc: CircuitBreakerExceeded) -> JSONResponse:
+    """Return 429 when global cross-user LLM calls per minute limit is reached."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": exc.detail},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
 
 
 @app.exception_handler(Exception)
