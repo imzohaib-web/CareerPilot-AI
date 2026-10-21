@@ -10,6 +10,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
+import { GroundedSourcesSection } from '../components/common/GroundedSourcesSection'
 import { describeApiError } from '../services/apiClient'
 import * as profileService from '../services/profile'
 import * as roadmapService from '../services/roadmap'
@@ -402,6 +403,14 @@ export function RoadmapPage() {
             </div>
           </div>
 
+          {/* Grounded Knowledge Sources */}
+          {result.sources && result.sources.length > 0 && (
+            <GroundedSourcesSection
+              sources={result.sources}
+              title="Verified Learning Paths & Documentation Sources"
+            />
+          )}
+
           {/* Phase-by-Phase Roadmap Timeline */}
           <div className="space-y-4">
             {result.roadmap.phases.map((phase) => {
@@ -502,6 +511,11 @@ export function RoadmapPage() {
                               {task.milestone && (
                                 <span className="rounded bg-slate-50 border border-slate-200 px-2 py-0.5 text-slate-600">
                                   Milestone: {task.milestone}
+                                </span>
+                              )}
+                              {task.source_refs && task.source_refs.length > 0 && (
+                                <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
+                                  Source: {task.source_refs.join(', ')}
                                 </span>
                               )}
                             </div>

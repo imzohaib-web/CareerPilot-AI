@@ -117,6 +117,7 @@ export interface SkillGapResponse {
   target_role: string
   target_job_description: string
   analysis: SkillGapAnalysis
+  sources?: CitationRef[]
   created_at: string
 }
 
@@ -131,6 +132,7 @@ export interface RoadmapTask {
   resource: string
   milestone: string
   estimated_hours: number
+  source_refs?: string[]
 }
 
 export interface RoadmapPhase {
@@ -166,6 +168,7 @@ export interface RoadmapResponse {
   weekly_hours: number
   roadmap: RoadmapContent
   completed_tasks: string[]
+  sources?: CitationRef[]
   created_at: string
 }
 
@@ -244,6 +247,7 @@ export interface InterviewFeedback {
   summary: string
   evaluations: QuestionEvaluation[]
   recommended_actions: string[]
+  rubric_sources?: CitationRef[]
 }
 
 export interface InterviewStartRequest {
@@ -279,6 +283,29 @@ export interface InterviewProgress {
 
 // ── RAG & Knowledge Base ──
 
+export interface CitationRef {
+  id: number
+  source_id: string
+  document_title: string
+  section_title?: string | null
+  heading_path?: string | null
+  snippet: string
+  similarity: number
+  scope: 'global' | 'user' | string
+}
+
+export interface KnowledgeBaseStats {
+  global_documents: number
+  global_chunks: number
+  user_documents: number
+  user_chunks: number
+  categories: string[]
+  embedding_model: string
+  vector_dimension: number
+  retrieval_backend: string
+  last_updated: string | null
+}
+
 export interface DocumentIngestRequest {
   title: string
   content: string
@@ -294,6 +321,7 @@ export interface DocumentInfo {
   chunk_count: number
   content_length: number
   created_at: string
+  scope?: 'global' | 'user' | string
 }
 
 export interface DocumentUploadResponse {
@@ -313,27 +341,40 @@ export interface ChunkSource {
   chunk_id: string
   document_id: string
   document_title: string
+  section_title?: string | null
+  heading_path?: string | null
   chunk_index: number
   content: string
   similarity_score: number
+  category?: string
+  scope?: 'global' | 'user' | string
+  fused_rank?: number
 }
 
 export interface RetrievalResult {
   query: string
   chunks: ChunkSource[]
   total_retrieved: number
+  status?: 'grounded' | 'weak' | 'no_context' | string
+  retrieval_backend?: string
 }
 
 export interface RAGChatRequest {
   message: string
   top_k?: number
   document_ids?: string[]
+  allow_general_knowledge?: boolean
 }
 
 export interface RAGChatResponse {
   reply: string
+  answer?: string
   sources: ChunkSource[]
+  citations?: CitationRef[]
   model_used: string
+  status?: string
+  retrieval_status?: 'grounded' | 'weak' | 'no_context' | string
+  used_general_knowledge?: boolean
 }
 
 // ── Career Mentor ────────────────────────────────────────────────────────
@@ -342,12 +383,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   created_at: string
+  citations?: CitationRef[]
 }
 
 export interface MentorChatResponse {
   conversation_id: string
   message: ChatMessage
   model: string
+  citations?: CitationRef[]
 }
 
 export interface MentorHistoryResponse {

@@ -12,6 +12,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
+import { GroundedSourcesSection } from '../components/common/GroundedSourcesSection'
 import { MessageContent } from '../components/chat/MessageContent'
 import { describeApiError } from '../services/apiClient'
 import * as chatService from '../services/chat'
@@ -119,7 +120,11 @@ export function CareerMentorPage() {
       if (!response.message?.content?.trim()) {
         throw new Error('EMPTY_REPLY')
       }
-      setMessages((prev) => [...prev, response.message])
+      const assistantMessage: ChatMessage = {
+        ...response.message,
+        citations: response.citations,
+      }
+      setMessages((prev) => [...prev, assistantMessage])
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m !== optimisticMessage))
       setInput(text)
@@ -320,9 +325,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         {isUser ? (
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         ) : (
-          <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900 prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5">
-            <MessageContent content={message.content} />
-          </div>
+          <>
+            <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900 prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5">
+              <MessageContent content={message.content} />
+            </div>
+
+            {message.citations && message.citations.length > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-slate-100">
+                <GroundedSourcesSection
+                  sources={message.citations}
+                  title="Grounded Mentor Knowledge Sources"
+                />
+              </div>
+            )}
+          </>
         )}
 
         {time && (

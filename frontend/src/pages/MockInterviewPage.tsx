@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react'
 
+import { GroundedSourcesSection } from '../components/common/GroundedSourcesSection'
 import { describeApiError } from '../services/apiClient'
 import * as interviewService from '../services/interview'
 import * as profileService from '../services/profile'
@@ -833,6 +834,14 @@ export function MockInterviewPage() {
                     {interview.feedback.summary}
                   </p>
                 </div>
+              )}
+
+              {/* Grounded Knowledge Sources */}
+              {interview.feedback.rubric_sources && interview.feedback.rubric_sources.length > 0 && (
+                <GroundedSourcesSection
+                  sources={interview.feedback.rubric_sources}
+                  title="Referenced Interview Question Banks & STAR Rubrics"
+                />
               )}
 
               {/* Recommended Actions */}

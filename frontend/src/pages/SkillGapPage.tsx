@@ -12,6 +12,7 @@ import {
   Lightbulb,
 } from 'lucide-react'
 
+import { GroundedSourcesSection } from '../components/common/GroundedSourcesSection'
 import { describeApiError } from '../services/apiClient'
 import * as profileService from '../services/profile'
 import * as resumeService from '../services/resume'
@@ -386,6 +387,14 @@ function GapAnalysisResultsView({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Grounded Knowledge Sources */}
+      {result.sources && result.sources.length > 0 && (
+        <GroundedSourcesSection
+          sources={result.sources}
+          title="Verified Role Matrix & Requirement Sources"
+        />
       )}
 
       {/* Bridge to Roadmap */}

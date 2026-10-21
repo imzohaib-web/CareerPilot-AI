@@ -1050,3 +1050,37 @@ async def test_interview_degrades_gracefully_when_retriever_raises():
         assert submit_resp.feedback.rubric_sources == []
 
 
+@pytest.mark.asyncio
+async def test_evaluation_harness_runs_end_to_end(tmp_path):
+    """Verify scripts.eval_rag runs end-to-end with mock embeddings and produces valid metrics."""
+    from scripts.eval_rag import run_evaluation
+    test_report_file = tmp_path / "TEST_RAG_EVALUATION.md"
+
+    summary = await run_evaluation(
+        report_path=test_report_file,
+        use_mock_embeddings=True,
+    )
+
+    assert summary is not None
+    assert summary["total_queries"] == 30
+    assert "metrics" in summary
+    assert "hash_256_baseline" in summary["metrics"]
+    assert "embeddings_only" in summary["metrics"]
+    assert "hybrid" in summary["metrics"]
+
+    # Verify metric values are well-formed proportions
+    for method in ("hash_256_baseline", "embeddings_only", "hybrid"):
+        scores = summary["metrics"][method]
+        assert 0.0 <= scores["hit_1"] <= 1.0
+        assert 0.0 <= scores["hit_3"] <= 1.0
+        assert 0.0 <= scores["hit_5"] <= 1.0
+        assert 0.0 <= scores["mrr"] <= 1.0
+
+    # Verify report file was created
+    assert test_report_file.exists()
+    content = test_report_file.read_text(encoding="utf-8")
+    assert "RAG Retrieval Pipeline Evaluation Report" in content
+    assert "Overall Performance Benchmark" in content
+
+
+

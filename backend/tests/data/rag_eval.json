@@ -1,242 +1,182 @@
 [
   {
     "id": 1,
-    "query": "What skills does a junior backend developer need?",
-    "type": "direct",
-    "expected_document_title": "Junior Backend Engineer Skill Matrix"
+    "question": "What are the must-have skills and competencies for a Junior Backend Engineer?",
+    "expected_document_title": "Junior Backend Engineer Skill Matrix",
+    "query_type": "direct"
   },
   {
     "id": 2,
-    "query": "How do I answer a behavioral question using the STAR method?",
-    "type": "direct",
-    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
+    "question": "What are the core requirements and expectations for a server-side developer?",
+    "expected_document_title": "Junior Backend Engineer Skill Matrix",
+    "query_type": "synonym"
   },
   {
     "id": 3,
-    "query": "How should I format an ATS friendly resume?",
-    "type": "direct",
-    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
+    "question": "How to answer behavioral interview questions using Situation, Task, Action, Result?",
+    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework",
+    "query_type": "direct"
   },
   {
     "id": 4,
-    "query": "FastAPI framework and building production REST APIs",
-    "type": "direct",
-    "expected_document_title": "FastAPI Framework and Production REST API Engineering"
+    "question": "STAR method structured storytelling framework for behavioral interviews",
+    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework",
+    "query_type": "paraphrase"
   },
   {
     "id": 5,
-    "query": "Docker containerization multi-stage builds and docker-compose",
-    "type": "direct",
-    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
+    "question": "How to build production REST APIs with FastAPI, Pydantic, and async endpoints?",
+    "expected_document_title": "FastAPI Framework and Production REST API Engineering",
+    "query_type": "direct"
   },
   {
     "id": 6,
-    "query": "What are the fundamentals of CI/CD with GitHub Actions?",
-    "type": "direct",
-    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions"
+    "question": "Modern Python ASGI framework for writing high-performance REST microservices and OpenAPI docs",
+    "expected_document_title": "FastAPI Framework and Production REST API Engineering",
+    "query_type": "synonym"
   },
   {
     "id": 7,
-    "query": "How can Pakistani software engineers get remote freelancing clients?",
-    "type": "direct",
-    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
+    "question": "How do Docker containers, multi-stage builds, and Docker Compose work?",
+    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose",
+    "query_type": "direct"
   },
   {
     "id": 8,
-    "query": "What are the hiring standards and technical entry tests in Pakistan software houses?",
-    "type": "direct",
-    "expected_document_title": "Pakistan Software Houses Hiring Standards and Technical Entry Tests"
+    "question": "Packaging applications into lightweight container images and orchestrating local microservices",
+    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose",
+    "query_type": "paraphrase"
   },
   {
     "id": 9,
-    "query": "server-side engineer responsibilities and requirements",
-    "type": "paraphrase",
-    "expected_document_title": "Junior Backend Engineer Skill Matrix"
+    "question": "How to set up automated CI/CD pipelines with GitHub Actions workflows?",
+    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions",
+    "query_type": "direct"
   },
   {
     "id": 10,
-    "query": "how to answer scenario based behavioral interview prompts effectively",
-    "type": "paraphrase",
-    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
+    "question": "Automated build, test, and deployment release pipelines triggered on pull requests and commits",
+    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions",
+    "query_type": "paraphrase"
   },
   {
     "id": 11,
-    "query": "how to pass corporate applicant tracking system cv scanners",
-    "type": "paraphrase",
-    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
+    "question": "What is the difference between SQL relational databases and MongoDB document storage?",
+    "expected_document_title": "Document Databases, MongoDB, and Unstructured Data Modeling",
+    "query_type": "paraphrase"
   },
   {
     "id": 12,
-    "query": "creating lightweight container images for cloud microservice deployments",
-    "type": "paraphrase",
-    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
+    "question": "PostgreSQL relational schemas, indexing, table normalization, and foreign keys",
+    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL",
+    "query_type": "direct"
   },
   {
     "id": 13,
-    "query": "automated test running on pull requests using git workflows",
-    "type": "paraphrase",
-    "expected_document_title": "Continuous Integration and Continuous Deployment (CI/CD) with GitHub Actions"
+    "question": "Writing complex database queries with JOINs, aggregation, transactions, and ACID properties",
+    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL",
+    "query_type": "paraphrase"
   },
   {
     "id": 14,
-    "query": "how developers from Pakistan land international contract work on Upwork and LinkedIn",
-    "type": "paraphrase",
-    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
+    "question": "How do vector embeddings, semantic search, and RAG architectures function in LLM applications?",
+    "expected_document_title": "Machine Learning Fundamentals, Vector Embeddings, and RAG Architecture",
+    "query_type": "direct"
   },
   {
     "id": 15,
-    "query": "turning university software development internship into permanent employment",
-    "type": "paraphrase",
-    "expected_document_title": "Transitioning from University Internship to Full-Time Software Engineer"
+    "question": "Retrieval-Augmented Generation pipeline using cosine similarity and vector stores to ground AI responses",
+    "expected_document_title": "Machine Learning Fundamentals, Vector Embeddings, and RAG Architecture",
+    "query_type": "synonym"
   },
   {
     "id": 16,
-    "query": "optimizing LinkedIn profile and choosing cloud certifications for engineers",
-    "type": "paraphrase",
-    "expected_document_title": "Professional LinkedIn Strategy and Industry Certifications for Developers"
+    "question": "What are React hooks, functional component lifecycles, and modern state management?",
+    "expected_document_title": "React Library, Hooks Architecture, and Modern Component State",
+    "query_type": "direct"
   },
   {
     "id": 17,
-    "query": "relational database design PostgreSQL indexing and SQL queries",
-    "type": "synonym",
-    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL"
+    "question": "Building reactive UI components with useState, useEffect, and virtual DOM reconciliation",
+    "expected_document_title": "React Library, Hooks Architecture, and Modern Component State",
+    "query_type": "paraphrase"
   },
   {
     "id": 18,
-    "query": "NoSQL document collections MongoDB queries and aggregation pipelines",
-    "type": "synonym",
-    "expected_document_title": "Document Databases, MongoDB, and Unstructured Data Modeling"
+    "question": "How to write automated unit tests, fixtures, and mocks in Python using Pytest?",
+    "expected_document_title": "Software Testing Fundamentals, Pytest, Unit Testing, and Mocking",
+    "query_type": "direct"
   },
   {
     "id": 19,
-    "query": "version control branching git flow merge conflicts and pull requests",
-    "type": "synonym",
-    "expected_document_title": "Git Version Control, Branching Models, and Collaborative Pull Requests"
+    "question": "Test driven development, regression assertions, and mocking external API network dependencies",
+    "expected_document_title": "Software Testing Fundamentals, Pytest, Unit Testing, and Mocking",
+    "query_type": "synonym"
   },
   {
     "id": 20,
-    "query": "unit testing with pytest test doubles mocking and integration test suites",
-    "type": "synonym",
-    "expected_document_title": "Software Testing Fundamentals, Pytest, Unit Testing, and Mocking"
+    "question": "System design fundamentals: horizontal scaling, load balancers, caching, and database sharding",
+    "expected_document_title": "Foundational System Design, Scalability, and Distributed Architectural Patterns",
+    "query_type": "direct"
   },
   {
     "id": 21,
-    "query": "distributed systems horizontal scaling load balancing and caching patterns",
-    "type": "synonym",
-    "expected_document_title": "Foundational System Design, Scalability, and Distributed Architectural Patterns"
+    "question": "Designing scalable architectures with Redis cache, rate limiting, and message brokers",
+    "expected_document_title": "Foundational System Design, Scalability, and Distributed Architectural Patterns",
+    "query_type": "paraphrase"
   },
   {
     "id": 22,
-    "query": "machine learning embeddings semantic search and retrieval augmented generation",
-    "type": "synonym",
-    "expected_document_title": "Machine Learning Fundamentals, Vector Embeddings, and RAG Architecture"
+    "question": "How to write quantified resume bullet points using the Google X-Y-Z action formula?",
+    "expected_document_title": "Writing High-Impact Quantified Resume Bullets Using Action Formulas",
+    "query_type": "direct"
   },
   {
     "id": 23,
-    "query": "data structures Big O time complexity arrays trees and graph algorithms",
-    "type": "synonym",
-    "expected_document_title": "Data Structures, Algorithms, and Technical Problem Solving Patterns"
+    "question": "Accomplished [X] as measured by [Y] by doing [Z] impact statements for resume experience",
+    "expected_document_title": "Writing High-Impact Quantified Resume Bullets Using Action Formulas",
+    "query_type": "paraphrase"
   },
   {
     "id": 24,
-    "query": "writing quantified resume bullet points using Google XYZ formula",
-    "type": "synonym",
-    "expected_document_title": "Writing High-Impact Quantified Resume Bullets Using Action Formulas"
+    "question": "How to optimize resume formatting for Applicant Tracking Systems (ATS)?",
+    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines",
+    "query_type": "direct"
   },
   {
     "id": 25,
-    "query": "What core competencies are expected from a junior frontend engineer?",
-    "type": "role_specific",
-    "expected_document_title": "Junior Frontend Engineer Skill Matrix"
+    "question": "Avoiding multi-column layout parsing errors in candidate scanning software",
+    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines",
+    "query_type": "synonym"
   },
   {
     "id": 26,
-    "query": "What technical skills does a junior full-stack developer need?",
-    "type": "role_specific",
-    "expected_document_title": "Junior Full-Stack Engineer Skill Matrix"
+    "question": "What technical questions are asked in backend engineering interviews regarding databases and APIs?",
+    "expected_document_title": "Backend Engineering Technical Interview Questions and Model Answers",
+    "query_type": "direct"
   },
   {
     "id": 27,
-    "query": "What tools and skills are mandatory for a junior data analyst?",
-    "type": "role_specific",
-    "expected_document_title": "Junior Data Analyst Skill Matrix"
+    "question": "Server-side technical interview questions on database concurrency, connection pooling, and idempotency",
+    "expected_document_title": "Backend Engineering Technical Interview Questions and Model Answers",
+    "query_type": "synonym"
   },
   {
     "id": 28,
-    "query": "What does a junior data scientist do and what skills are required?",
-    "type": "role_specific",
-    "expected_document_title": "Junior Data Scientist Skill Matrix"
+    "question": "What questions are asked in frontend engineering technical interviews regarding web performance?",
+    "expected_document_title": "Frontend Engineering Technical Interview Questions and Model Answers",
+    "query_type": "direct"
   },
   {
     "id": 29,
-    "query": "Junior DevOps and Cloud engineer skills Terraform AWS and Kubernetes",
-    "type": "role_specific",
-    "expected_document_title": "Junior DevOps and Cloud Engineer Skill Matrix"
+    "question": "How to handle workplace disagreement with a senior engineer or missing a tight deadline?",
+    "expected_document_title": "Situational and Workplace Scenario Interview Patterns",
+    "query_type": "direct"
   },
   {
     "id": 30,
-    "query": "What skills are needed for a junior QA automation and SDET engineer?",
-    "type": "role_specific",
-    "expected_document_title": "Junior QA and SDET Skill Matrix"
-  },
-  {
-    "id": 31,
-    "query": "Junior mobile developer skills Flutter React Native iOS Android",
-    "type": "role_specific",
-    "expected_document_title": "Junior Mobile Application Developer Skill Matrix"
-  },
-  {
-    "id": 32,
-    "query": "Junior machine learning and AI engineer skill matrix and roadmap",
-    "type": "role_specific",
-    "expected_document_title": "Junior Machine Learning and AI Engineer Skill Matrix"
-  },
-  {
-    "id": 33,
-    "query": "fastpi dependecy injecton and pydantc schemas",
-    "type": "misspelled",
-    "expected_document_title": "FastAPI Framework and Production REST API Engineering"
-  },
-  {
-    "id": 34,
-    "query": "dokcerfile multi stage buikd and compose yamls",
-    "type": "misspelled",
-    "expected_document_title": "Docker Containerization, Multi-Stage Builds, and Compose"
-  },
-  {
-    "id": 35,
-    "query": "behaveoral interveiw using star methd stituation task",
-    "type": "misspelled",
-    "expected_document_title": "Behavioral Interview Mastery with the STAR Framework"
-  },
-  {
-    "id": 36,
-    "query": "ats freindly cv bullet ponits and formating guidlines",
-    "type": "misspelled",
-    "expected_document_title": "Modern ATS Resume Optimization and Format Guidelines"
-  },
-  {
-    "id": 37,
-    "query": "relatonal databse sql posgtresql indexng queries",
-    "type": "misspelled",
-    "expected_document_title": "Relational Databases, SQL Mastery, and PostgreSQL"
-  },
-  {
-    "id": 38,
-    "query": "git branchng rebase and pull reqeust conflict resoluton",
-    "type": "misspelled",
-    "expected_document_title": "Git Version Control, Branching Models, and Collaborative Pull Requests"
-  },
-  {
-    "id": 39,
-    "query": "pakistan remot softwre hous freelancng upwrk contracts",
-    "type": "misspelled",
-    "expected_document_title": "Remote Global Contracts and Freelancing for Pakistani Software Engineers"
-  },
-  {
-    "id": 40,
-    "query": "pythn async await event loop and asyncio architecture",
-    "type": "misspelled",
-    "expected_document_title": "Python Core Programming and Asynchronous Architecture"
+    "question": "What are Pakistani software house hiring tests and technical recruitment standards?",
+    "expected_document_title": "Pakistan Software Houses Hiring Standards and Technical Entry Tests",
+    "query_type": "direct"
   }
 ]

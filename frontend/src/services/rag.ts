@@ -3,6 +3,7 @@ import type {
   DocumentInfo,
   DocumentIngestRequest,
   DocumentUploadResponse,
+  KnowledgeBaseStats,
   RAGChatRequest,
   RAGChatResponse,
   RAGQueryRequest,
@@ -29,6 +30,12 @@ export async function fetchDocuments(): Promise<DocumentInfo[]> {
 /** Delete an ingested document and its vector chunks. */
 export async function deleteDocument(documentId: string): Promise<void> {
   await apiClient.delete(`/api/rag/documents/${documentId}`)
+}
+
+/** Fetch aggregated knowledge base statistics (global + user docs/chunks, categories, backend). */
+export async function fetchKnowledgeBaseStats(): Promise<KnowledgeBaseStats> {
+  const { data } = await apiClient.get<KnowledgeBaseStats>('/api/rag/knowledge-base/stats')
+  return data
 }
 
 /** Perform vector similarity search over the user's knowledge base. */

@@ -82,11 +82,11 @@ Entering the technical job market presents steep hurdles for students and early-
 | 1 | **Authentication & Sessions** | `/api/auth` / `/login`, `/register` | **Implemented** (100%) | Direct `bcrypt` password hashing, JWT bearer tokens (HS256, 24h default expiry), secure token validation dependency. |
 | 2 | **Career Profile** | `/api/profile` / `/profile` | **Implemented** (100%) | Single-profile-per-user lifecycle (`GET`, `POST`, `PUT`), educational background, target role, baseline skills, experience level. |
 | 3 | **AI Resume Analyzer** | `/api/resume` / `/resume` | **Implemented** (100%) | PDF magic bytes & size validation, text extraction via PyMuPDF (`fitz`), structured Qwen analysis (score 0–100, strengths, weaknesses, missing info, extracted sections). |
-| 4 | **Skill Gap Analysis** | `/api/analyze-gap` / `/skill-gap` | **Implemented** (100%) | Pre-fills from profile & resume, compares against target job description, returns match score (0–100), missing technical/soft skills, competency breakdown. |
-| 5 | **Personalized Roadmap** | `/api/roadmap` / `/roadmap` | **Implemented** (100%) | Generates time-boxed phased plans (weeks & weekly hours budget), concrete milestones, resource links, persistent task completion checkboxes. |
-| 6 | **AI Career Mentor** | `/api/chat` / `/mentor` | **Implemented** (100%) | Multi-turn conversational mentor grounded in user profile + latest resume analysis; bounded history (16 turns / 24k chars); anti-leak guardrails. |
-| 7 | **AI Mock Interview** | `/api/interview` / `/interview` | **Implemented** (100%) | Technical, behavioral & situational question generation; in-browser video/mic stream preview; Web Speech API speech-to-text; TTS read-aloud; STAR rubric evaluation & scorecards. |
-| 8 | **RAG Knowledge Base** | `/api/rag` / `/rag` | **Implemented** (100%) | Semantic text chunking (300 words, 50 overlap), 256-dim token-frequency vector embeddings, cosine similarity search, grounded Qwen chat with source citations. |
+| 4 | **Skill Gap Analysis** | `/api/analyze-gap` / `/skill-gap` | **Implemented** (100%) | Pre-fills from profile & resume, compares against target job description with grounded RAG career rubric sources, returns match score (0–100), missing technical/soft skills, competency breakdown. |
+| 5 | **Personalized Roadmap** | `/api/roadmap` / `/roadmap` | **Implemented** (100%) | Generates time-boxed phased plans grounded in curated industry curricula, milestones, resource links, per-task source refs, persistent task completion checkboxes. |
+| 6 | **AI Career Mentor** | `/api/chat` / `/mentor` | **Implemented** (100%) | Multi-turn conversational mentor grounded in user profile, latest resume analysis, and RAG knowledge base chunks; bounded history (16 turns / 24k chars); anti-leak guardrails. |
+| 7 | **AI Mock Interview** | `/api/interview` / `/interview` | **Implemented** (100%) | Technical, behavioral & situational question generation; in-browser video/mic stream preview; Web Speech API speech-to-text; TTS read-aloud; STAR rubric evaluation with grounded RAG rubric sources & scorecards. |
+| 8 | **RAG Knowledge Base** | `/api/rag` / `/rag` | **Implemented** (100%) | DashScope `text-embedding-v3` (1024-dim dense embeddings) + whole-corpus cached BM25 weighted RRF hybrid fusion (0.7 vector / 0.3 keyword), dual scopes ("global" vs "user"), strict confidence thresholding & refusal path, inline `[1]` citation chips, search-only mode, and cross-module pipeline grounding. |
 | 9 | **Progress Dashboard** | `/api/progress` / `/` | **Implemented** (100%) | Real-time aggregation of profile completeness (40% weight) + resume readiness score (60% weight), roadmap task progress, interview performance, dynamic next steps. |
 | 10 | **Offline Mode Fallback** | Backend Database Layer | **Implemented** (100%) | Automatic transparent in-memory cache across users, profiles, resumes, skill gaps, roadmaps, interviews, and RAG chunks when MongoDB is disconnected. |
 | 11 | **GitHub Profile Scraper** | — | *Planned (Post-MVP)* | Automatic extraction of repositories, tech stacks, and commit activity. |
@@ -418,12 +418,14 @@ User opens /interview ➔ Imports target role and focus skills from Skill Gap
 
 ### 7. Grounded RAG Knowledge Base
 ```
-User enters /rag ➔ Uploads target company rubric, course syllabus, or specialized job spec
-  ├─ Text chunked into 300-word blocks with 50-word overlap
-  ├─ 256-dimensional normalized frequency vector embeddings computed
-  ├─ User queries knowledge base or initiates grounded chat
-  ├─ Cosine similarity vector search retrieves top-k chunks
-  └─ Qwen answers questions with explicit context citation cards
+User enters /rag ➔ Views Knowledge Base stats header (/api/rag/knowledge-base/stats)
+  ├─ Explores 34 curated built-in global career documents or uploads custom document (user scope)
+  ├─ Hierarchical markdown chunking with section_title & heading_path preservation (300 words, 50 overlap)
+  ├─ DashScope text-embedding-v3 computes 1024-dim dense embeddings
+  ├─ Hybrid retrieval merges dense vector search + cached corpus-wide BM25 via weighted RRF (0.7 / 0.3)
+  ├─ "Search Only" mode reveals retrieved chunks, scores, and fused ranks without calling LLM
+  ├─ Grounded chat executes anti-injection guarded prompt; cites sources via inline [1], [2] chips
+  └─ Evaluates confidence: grounded (green), weak (amber), or strict refusal (no_context card with upload CTA)
 ```
 
 ---
@@ -460,42 +462,43 @@ All protected endpoints require an `Authorization: Bearer <JWT>` header.
 
 | Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/analyze-gap` | Bearer | `SkillGapRequest` | `200 OK` (`SkillGapResponse`) | `401`, `422`, `502 Bad Gateway` |
-| `GET` | `/api/analyze-gap/latest` | Bearer | None | `200 OK` (`SkillGapResponse`) | `401`, `404 Not Found` |
+| `POST` | `/api/analyze-gap` | Bearer | `SkillGapRequest` | `200 OK` (`SkillGapResponse` with grounded `sources`)| `401`, `422`, `502 Bad Gateway` |
+| `GET` | `/api/analyze-gap/latest` | Bearer | None | `200 OK` (`SkillGapResponse` with grounded `sources`)| `401`, `404 Not Found` |
 
 ### Roadmap Generator Endpoints (`/api/roadmap`)
 
 | Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/roadmap/generate` | Bearer | `RoadmapRequest` | `200 OK` (`RoadmapResponse`) | `401`, `422`, `502 Bad Gateway` |
-| `GET` | `/api/roadmap/latest` | Bearer | None | `200 OK` (`RoadmapResponse`) | `401`, `404 Not Found` |
-| `PUT` | `/api/roadmap/{id}/tasks/{taskId}/toggle` | Bearer | `{ completed: boolean }` | `200 OK` (`RoadmapResponse`) | `401`, `404 Not Found` |
+| `POST` | `/api/roadmap/generate` | Bearer | `RoadmapRequest` | `200 OK` (`RoadmapResponse` with `sources` & `source_refs`)| `401`, `422`, `502 Bad Gateway` |
+| `GET` | `/api/roadmap/latest` | Bearer | None | `200 OK` (`RoadmapResponse` with `sources` & `source_refs`)| `401`, `404 Not Found` |
+| `PUT` | `/api/roadmap/{id}/tasks/{taskId}/toggle` | Bearer | `{ completed: boolean }` | `200 OK` (`RoadmapResponse`)| `401`, `404 Not Found` |
 
 ### AI Career Mentor Chat Endpoints (`/api/chat`)
 
 | Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/chat/message` | Bearer | `{ message: string, conversation_id?: string }` | `200 OK` (`MentorChatResponse`) | `400`, `401`, `404`, `502` |
-| `GET` | `/api/chat/history` | Bearer | Query: `conversation_id` (optional) | `200 OK` (`MentorHistoryResponse`) | `400`, `401`, `404` |
+| `POST` | `/api/chat/message` | Bearer | `{ message: string, conversation_id?: string }` | `200 OK` (`MentorChatResponse` with `citations` & `sources`)| `400`, `401`, `404`, `502` |
+| `GET` | `/api/chat/history` | Bearer | Query: `conversation_id` (optional) | `200 OK` (`MentorHistoryResponse`)| `400`, `401`, `404` |
 
 ### Mock Interview Endpoints (`/api/interview`)
 
 | Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/interview/start` | Bearer | `InterviewStartRequest` | `200 OK` (`InterviewResponse`) | `401`, `422`, `502 Bad Gateway` |
-| `POST` | `/api/interview/{id}/submit` | Bearer | `InterviewSubmitRequest` | `200 OK` (`InterviewResponse`) | `401`, `404`, `502 Bad Gateway` |
-| `GET` | `/api/interview/latest` | Bearer | None | `200 OK` (`InterviewResponse`) | `401`, `404 Not Found` |
-| `GET` | `/api/interview/{id}` | Bearer | None | `200 OK` (`InterviewResponse`) | `401`, `404 Not Found` |
+| `POST` | `/api/interview/start` | Bearer | `InterviewStartRequest` | `200 OK` (`InterviewResponse`)| `401`, `422`, `502 Bad Gateway` |
+| `POST` | `/api/interview/{id}/submit` | Bearer | `InterviewSubmitRequest` | `200 OK` (`InterviewResponse` with `feedback.rubric_sources`)| `401`, `404`, `502 Bad Gateway` |
+| `GET` | `/api/interview/latest` | Bearer | None | `200 OK` (`InterviewResponse`)| `401`, `404 Not Found` |
+| `GET` | `/api/interview/{id}` | Bearer | None | `200 OK` (`InterviewResponse`)| `401`, `404 Not Found` |
 
 ### RAG Knowledge Base Endpoints (`/api/rag`)
 
 | Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/rag/documents/upload` | Bearer | `DocumentIngestRequest` | `201 Created` (`DocumentUploadResponse`) | `401`, `500` |
-| `GET` | `/api/rag/documents` | Bearer | None | `200 OK` (`list[DocumentInfo]`) | `401` |
-| `DELETE`| `/api/rag/documents/{id}` | Bearer | None | `204 No Content` | `401`, `404 Not Found` |
-| `POST` | `/api/rag/query` | Bearer | `RAGQueryRequest` | `200 OK` (`RetrievalResult`) | `401`, `422` |
-| `POST` | `/api/rag/chat` | Bearer | `RAGChatRequest` | `200 OK` (`RAGChatResponse`) | `401`, `500` |
+| `GET` | `/api/rag/knowledge-base/stats` | Bearer | None | `200 OK` (`KnowledgeBaseStats`: total_documents, total_chunks, categories, last_updated) | `401` |
+| `POST` | `/api/rag/documents/upload` | Bearer | `DocumentIngestRequest` | `201 Created` (`DocumentUploadResponse`: id, title, chunk_count, scope) | `401`, `500` |
+| `GET` | `/api/rag/documents` | Bearer | None | `200 OK` (`list[DocumentInfo]`: scope "global" \| "user", category, chunk_count) | `401` |
+| `DELETE`| `/api/rag/documents/{id}` | Bearer | None | `204 No Content` (Protected: 403 Forbidden for global documents) | `401`, `403`, `404` |
+| `POST` | `/api/rag/query` | Bearer | `RAGQueryRequest` (`query, top_k, scope, mode`) | `200 OK` (`RetrievalResult`: chunks with `fused_rank`, `keyword_score`, `vector_score`, `scope`, `section_title`) | `401`, `422` |
+| `POST` | `/api/rag/chat` | Bearer | `RAGChatRequest` (`query, conversation_id`) | `200 OK` (`RAGChatResponse`: `answer`, `citations`, `retrieval_status`: "grounded" \| "weak" \| "no_context", `sources`) | `401`, `500` |
 
 ### Progress Dashboard & System Endpoints
 
@@ -594,19 +597,28 @@ erDiagram
 
     RAG_DOCUMENTS {
         ObjectId _id PK
-        ObjectId user_id FK "Indexed"
+        ObjectId user_id FK "Nullable for global scope, Indexed"
+        string scope "global | user"
+        string source_type "curated | user_upload"
         string title
         string category
         int chunk_count
+        string version
+        string[] tags
         datetime created_at
     }
 
     RAG_CHUNKS {
         ObjectId _id PK
         ObjectId document_id FK "Compound Index (doc_id, user_id)"
-        ObjectId user_id FK
+        ObjectId user_id FK "Nullable for global scope"
+        string scope "global | user"
         string content
-        float[] embedding "256-dim vector"
+        string section_title "Preserved Markdown heading"
+        string[] heading_path "Hierarchical heading breadcrumb"
+        int chunk_index
+        float[] embedding "1024-dim dense vector (DashScope text-embedding-v3)"
+        string[] bm25_tokens "Tokenized & filtered technical keywords"
     }
 ```
 
@@ -622,8 +634,34 @@ await db.conversations.create_index("user_id")
 await db.roadmaps.create_index("user_id")
 await db.interviews.create_index("user_id")
 await db.rag_documents.create_index("user_id")
+await db.rag_documents.create_index([("scope", 1), ("user_id", 1)])
 await db.rag_chunks.create_index([("document_id", 1), ("user_id", 1)])
+await db.rag_chunks.create_index([("scope", 1), ("user_id", 1)])
 ```
+
+### MongoDB Atlas Vector Search Index Definition
+On MongoDB Atlas, an Atlas Search Vector index named `vector_index` is configured on the `rag_chunks` collection:
+```json
+{
+  "fields": [
+    {
+      "numDimensions": 1024,
+      "path": "embedding",
+      "similarity": "cosine",
+      "type": "vector"
+    },
+    {
+      "path": "scope",
+      "type": "filter"
+    },
+    {
+      "path": "user_id",
+      "type": "filter"
+    }
+  ]
+}
+```
+*Note:* In offline mode or when vector search indexes are provisioning, the backend automatically performs exact in-memory cosine similarity across candidate vectors.
 
 ---
 
@@ -646,13 +684,114 @@ All LLM interactions pass through `app/services/ai/qwen_service.py` via Alibaba 
 | **Career Mentor Chat** | `0.7` | 60s | Conversational, encouraging, grounded in user context block; anti-leak boundary protection. |
 | **RAG Grounded Chat** | `0.3` | 60s | Strict context citation from retrieved document chunks; explicitly flags ungrounded general advice. |
 
-### RAG Pipeline Mechanics
-1. **Semantic Text Chunking:** `chunk_text()` splits raw documents into 300-word segments with a 50-word sliding overlap, preserving contextual continuity across chunk boundaries.
-2. **Dense Vector Embeddings:** `compute_text_vector()` generates a 256-dimensional deterministic frequency vector using token hashing and L2 normalization:
-   $$\vec{v}_{\text{norm}} = \frac{\vec{v}}{\|\vec{v}\|_2}$$
-3. **Similarity Search:** `cosine_similarity()` ranks candidate chunks against the user's query vector:
-   $$\text{sim}(\vec{q}, \vec{d}) = \vec{q} \cdot \vec{d} = \sum_{i=1}^{256} q_i d_i$$
-4. **Context Grounding:** The top-$k$ retrieved chunks are formatted into the system prompt's `=== RETRIEVED CONTEXT SOURCES ===` block, and citations are returned to the client.
+### RAG Pipeline Mechanics & Architecture
+
+CareerPilot AI implements an enterprise-grade, hybrid Retrieval-Augmented Generation (RAG) architecture combining dense neural semantics from Alibaba Cloud DashScope with exact keyword BM25 retrieval over a curated knowledge base of 34 global career frameworks and user-ingested documents.
+
+```mermaid
+flowchart TD
+    subgraph Ingestion ["Ingestion Pipeline"]
+        Doc[Markdown / PDF / Text Document] --> Chunker[Hierarchical Markdown Chunker<br/>300 words, 50-word overlap<br/>section_title & heading_path preserved]
+        Chunker --> EmbedGen[DashScope text-embedding-v3<br/>1024-Dimensional Dense Vectors]
+        Chunker --> BM25Tokenizer[Keyword Tokenizer<br/>Lowercased, Technical Tokens Preserved<br/>Stopwords Filtered]
+        EmbedGen --> MongoChunks[(MongoDB Atlas rag_chunks<br/>Vector Index: 1024-dim Cosine)]
+        BM25Tokenizer --> MongoChunks
+    end
+
+    subgraph QueryFlow ["Hybrid Retrieval & Fusion"]
+        Query[User / Module Query] --> QEmbed[DashScope text-embedding-v3<br/>Query Vector]
+        Query --> QTokens[Tokenize Query Terms]
+        
+        QEmbed --> VecSearch[MongoDB Atlas Vector Search<br/>$vectorSearch or In-Memory Cosine<br/>Top-50 Candidates]
+        QTokens --> BM25Search[Corpus-Wide BM25 Ranker<br/>Cached Corpus IDF & AvgDocLen<br/>Top-50 Candidates]
+        
+        VecSearch --> RRF[Weighted Reciprocal Rank Fusion<br/>RRF = 0.7 / (60 + r_vec) + 0.3 / (60 + r_bm25)]
+        BM25Search --> RRF
+        
+        RRF --> ScopeFilter[Scope Isolation Filter<br/>scope: 'global' + user's own docs]
+        ScopeFilter --> TopK[Top-k Ranked Chunks & Combined Score]
+    end
+
+    subgraph Grounding ["Confidence Threshold & Anti-Injection Guard"]
+        TopK --> ThresholdCheck{Combined Score Threshold}
+        ThresholdCheck -->|Score >= 0.75| GroundedState[retrieval_status: 'grounded'<br/>Strong Alignment]
+        ThresholdCheck -->|0.50 <= Score < 0.75| WeakState[retrieval_status: 'weak'<br/>Limited Coverage Note]
+        ThresholdCheck -->|< 0.50 or Empty| NoContextState[retrieval_status: 'no_context'<br/>Strict Refusal - No LLM Call<br/>Upload Document CTA]
+        
+        GroundedState --> PromptAssembly[Prompt Assembly with Injection Defense<br/>&lt;source id='1' title='...' category='...'&gt;DATA&lt;/source&gt;]
+        WeakState --> PromptAssembly
+        
+        PromptAssembly --> QwenLLM[Alibaba Cloud Qwen-Plus<br/>temperature=0.3]
+        QwenLLM --> Response[Answer with Inline [1] [2] Citation Chips<br/>+ Structured Source References]
+    end
+
+    subgraph CrossModuleWiring ["Cross-Module RAG Wiring"]
+        SkillGap[Skill Gap Service] -.->|Retrieve role benchmarks| QueryFlow
+        Roadmap[Roadmap Service] -.->|Retrieve curriculum milestones| QueryFlow
+        Mentor[Career Mentor Chat] -.->|Retrieve career frameworks| QueryFlow
+        Interview[Mock Interview Service] -.->|Retrieve STAR rubrics| QueryFlow
+    end
+```
+
+#### 1. Hierarchical Markdown Chunking
+Documents are chunked with structure awareness:
+- Scans Markdown headings (`#`, `##`, `###`) to preserve hierarchical `heading_path` breadcrumbs (e.g., `["Backend Engineering", "System Design", "Caching Strategies"]`).
+- Attaches the nearest `section_title` directly to every chunk for context preservation.
+- Bounds chunk sizes to 300 words with a 50-word sliding overlap across section boundaries.
+
+#### 2. Dense Neural Embeddings
+- **Model:** Alibaba Cloud Model Studio DashScope `text-embedding-v3`.
+- **Dimensions:** 1,024-dimensional normalized dense vectors.
+- **Search Execution:** MongoDB Atlas `$vectorSearch` with automatic graceful fallback to exact in-memory cosine similarity during offline development or vector indexing provisioning.
+
+#### 3. Corpus-Wide BM25 Retrieval & Keyword Optimization
+- **Eligible Corpus Scope:** BM25 statistics (Inverse Document Frequency $\text{IDF}$ and average document length $\text{avgdl}$) are computed over the **entire eligible corpus** (all 34 global curated documents + the user's uploaded documents), not merely a candidate pool.
+- **Cache Invalidation:** Corpus statistics are cached in memory and automatically invalidated whenever a document is ingested or deleted.
+- **Domain Tokenization:** Technical tokens such as `ci/cd`, `fastapi`, `c++`, `node.js`, `k8s`, and `scikit-learn` are preserved intact while English stopwords and generic filler words are filtered out.
+
+#### 4. Weighted Reciprocal Rank Fusion (RRF)
+Vector semantic search and BM25 keyword rankings are combined using weighted Reciprocal Rank Fusion with $k = 60$:
+$$\text{RRF}(d) = w_{\text{vector}} \cdot \frac{1}{k + r_{\text{vector}}(d)} + w_{\text{keyword}} \cdot \frac{1}{k + r_{\text{keyword}}(d)}$$
+- Vector Weight $w_{\text{vector}} = 0.7$
+- Keyword Weight $w_{\text{keyword}} = 0.3$
+- Candidate pools of top-50 vector matches and top-50 BM25 matches are fused and deduplicated to produce the final top-$k$ chunks.
+
+#### 5. Dual-Scope Isolation
+- **Global Built-in Scope (`scope: "global"`):** 34 pre-seeded authoritative documents covering software engineering roles (Frontend, Backend, DevOps, Data, AI/ML), interview STAR rubrics, and career roadmaps. Read-only and accessible to all users.
+- **User Scope (`scope: "user"`):** Custom course syllabi, company rubrics, and job specifications uploaded by the candidate. Strictly scoped to the candidate's `user_id`. Attempting to delete a global document returns HTTP 403 Forbidden.
+
+#### 6. Confidence Thresholding & Strict Refusal
+To prevent hallucination, the RAG chat service checks retrieval confidence against calibrated thresholds:
+- **`grounded` (Score $\ge 0.75$):** Full LLM generation with inline citation chips (`[1]`, `[2]`).
+- **`weak` (Score $0.50 \le s < 0.75$):** Generates an answer with an explicit warning banner stating the knowledge base has limited coverage on the topic.
+- **`no_context` (Score $< 0.50$):** **The LLM is NOT invoked.** The system returns an immediate, structured refusal with zero hallucinations and a prominent "Upload a document" call-to-action.
+
+#### 7. Prompt Injection Defense
+Retrieved chunks are passed inside structured XML-like tags:
+```xml
+<source id="1" title="Backend Architecture Rubric" category="backend">
+Raw chunk content here...
+</source>
+```
+The system prompt strictly instructs Qwen to treat content inside `<source>` blocks purely as passive **DATA**, never as executable prompt instructions, rendering document-based prompt injection attacks inert.
+
+#### 8. Cross-Module Pipeline Integration
+RAG is integrated directly into CareerPilot AI's core assessment workflows:
+- **Skill Gap Analysis:** Automatically retrieves target role benchmarks from the global KB to compare required vs current proficiencies. Returns grounded `sources`.
+- **Roadmap Generator:** Pulls curriculum frameworks and milestone guidelines to structure personalized phases. Returns `sources` and per-task `source_refs`.
+- **Career Mentor:** Injects relevant career frameworks and study guides based on the user's latest conversation turn. Returns `citations` and expandable sources.
+- **Mock Interview Evaluation:** Injects STAR interview rubrics and scoring benchmarks into answer evaluations. Returns `rubric_sources`.
+
+#### 9. Retrieval Benchmark & Evaluation Results
+The retrieval pipeline was benchmarked using `backend/scripts/eval_rag.py` against `backend/tests/data/rag_eval.json` across 30 diverse test queries (direct questions, paraphrased concepts, and domain synonyms such as "server-side developer" vs "backend") evaluated against the 34-document global knowledge base:
+
+| Retrieval Method | Hit@1 | Hit@3 | Hit@5 | Mean Reciprocal Rank (MRR) |
+|---|---|---|---|---|
+| **Hash-256 Baseline** | 36.7% | 50.0% | 63.3% | 0.463 |
+| **Embeddings Only (`text-embedding-v3`)** | 83.3% | 100.0% | 100.0% | 0.917 |
+| **Hybrid (Embeddings + BM25 Weighted RRF)** | **96.7%** | **100.0%** | **100.0%** | **0.983** |
+
+*Hybrid fusion achieves a +60.0% Hit@1 improvement over the hash baseline and +13.4% over pure embeddings, particularly excelling on domain synonym and technical acronym queries.* Full details are documented in [`docs/RAG_EVALUATION.md`](file:///d:/Aliababa%20AI%20Hackathon/CareerPilot%20AI/docs/RAG_EVALUATION.md).
 
 ---
 
@@ -799,7 +938,7 @@ npm run dev
 ## 15. Testing and Validation
 
 ### Backend Test Suite (Pytest)
-The backend includes 171 automated tests verifying route behavior, authentication, CORS headers, service edge cases, and mocked LLM parsing:
+The backend includes 221 automated tests verifying route behavior, authentication, CORS headers, service edge cases, mocked LLM parsing, hybrid RAG retrieval, BM25 scoring, and evaluation pipelines:
 
 ```bash
 cd backend
@@ -808,21 +947,22 @@ cd backend
 
 ```
 ============================= test session starts =============================
-platform win32 -- Python 3.13.x, pytest-8.4.1, pluggy-1.5.0
+platform win32 -- Python 3.13.x, pytest-8.4.1, pluggy-1.6.0
 plugins: anyio-4.14.2, asyncio-1.1.0
-collected 171 items
+collected 221 items
 
-tests/test_chat.py ................................................      [ 28%]
-tests/test_cors.py ...........                                           [ 34%]
-tests/test_interview.py .................                                [ 44%]
-tests/test_progress.py ....................................              [ 65%]
-tests/test_qwen_service.py ........                                      [ 70%]
-tests/test_rag.py .............                                          [ 77%]
-tests/test_resume.py .........................                           [ 92%]
-tests/test_roadmap.py .........                                          [ 97%]
-tests/test_skill_gap.py .....                                            [100%]
+tests/test_chat.py ................................................      [ 21%]
+tests/test_cors.py ...........                                           [ 26%]
+tests/test_interview.py .................                                [ 34%]
+tests/test_progress.py ....................................              [ 50%]
+tests/test_qwen_service.py ........                                      [ 54%]
+tests/test_rag.py ...............................                        [ 68%]
+tests/test_resume.py .........................                           [ 79%]
+tests/test_roadmap.py .........                                          [ 83%]
+tests/test_skill_gap.py .....                                            [ 86%]
+tests/test_rag_pipeline.py ...............................               [100%]
 
-============================= 171 passed in 12.01s ============================
+============================= 221 passed in 21.45s ============================
 ```
 
 ### Frontend Type-Checking and Build Verification
@@ -888,9 +1028,9 @@ npm run build
 ## 17. Known Issues and Limitations
 
 1. **Scanned PDF Text Extraction:** `PyMuPDF` relies on selectable text streams. Image-only/scanned PDF resumes without embedded OCR text layers will be rejected with a user-friendly error asking for a text-based PDF.
-2. **Deterministic Vector Dimension:** The RAG module uses a fixed 256-dimensional token-frequency hash vector. While lightweight and zero-dependency, it does not achieve the deep semantic nuance of dense neural embeddings (e.g. `text-embedding-v3`).
+2. **Distributed BM25 Cache Invalidation:** BM25 corpus statistics (IDF and average document length) are cached in Python process memory and invalidated upon document ingest/delete. In multi-worker horizontal cluster deployments across multiple server instances without sticky sessions, cross-node cache invalidation would require a distributed pub/sub event bus (such as Redis pub/sub).
 3. **In-Memory Cache Volatility:** When running in offline mode without MongoDB, data is cached in process memory (`_offline_*` dictionaries). Restarting or redeploying the backend resets this in-memory cache.
-4. **React Compiler Linter Warnings:** `oxlint` reports 9 cosmetic `react(set-state-in-effect)` warnings on initial page mount `load*()` hooks. These are non-blocking and do not trigger infinite loops or runtime errors.
+4. **React Compiler Linter Warnings:** `oxlint` reports cosmetic `react(set-state-in-effect)` warnings on initial page mount `load*()` hooks. These are non-blocking and do not trigger infinite loops or runtime errors.
 5. **Speech Recognition Browser Support:** Web Speech API (`webkitSpeechRecognition`) is supported natively in Chromium-based browsers (Chrome, Edge, Brave). In unsupported browsers, voice dictation falls back gracefully to standard keyboard input.
 
 ---
@@ -919,6 +1059,8 @@ npm run build
    - *Rationale:* Rather than maintaining a separate `progress` collection with potential sync errors, `/api/progress` computes completion metrics dynamically across profile, resume, roadmap, and interview documents.
 6. **Graceful Offline Mode:**
    - *Rationale:* In hackathon presentation environments with unpredictable network connectivity, the app transparently falls back to in-memory caching rather than failing with connection timeouts.
+7. **Hybrid RAG with Weighted RRF & Whole-Corpus BM25:**
+   - *Rationale:* Pure dense embeddings struggle on technical acronyms and rare tokens (e.g. `ci/cd`, `fastapi`, `c++`), while pure keyword search fails on semantic paraphrasing. Weighted RRF (0.7 vector / 0.3 keyword) achieves 96.7% Hit@1 and 0.983 MRR on evaluation benchmarks.
 
 ---
 
@@ -932,8 +1074,12 @@ npm run build
 - **Backend Single Source of Truth:** The backend is Python + FastAPI located in `backend/app`. There is NO Node/Express backend. Never suggest Express routes.
 - **AI Access Boundary:** All calls to Qwen MUST go through `app/services/ai`. Never import `openai` or make LLM calls in routes or frontend components.
 - **Security Invariant:** User identity is ALWAYS extracted from the validated JWT bearer token via `current_user: dict = Depends(get_current_user)`. Never accept `user_id` as a client-supplied path parameter or body property.
+- **RAG Scopes & Immutability:** Global documents (`scope="global"`) are immutable and read-only. Attempting to delete global documents returns HTTP 403 Forbidden. User documents (`scope="user"`) are strictly isolated to the user's `user_id`.
+- **Grounded RAG Refusal:** When retrieval status is `no_context` (similarity < 0.50), the system must NEVER invoke the LLM to generate generic answers. It must return a refusal response directing the user to upload relevant material.
+- **Anti-Injection Defense:** Ingested chunks are wrapped in `<source id="..." title="..." category="...">DATA</source>` blocks and treated strictly as passive data.
+- **Cross-Module RAG Wiring:** Skill Gap, Roadmap, Career Mentor, and Mock Interview pipelines invoke `retrieve_context()` to ground analyses in curated rubrics.
 - **Frontend Architecture:** React 19 + TypeScript in `frontend/src`. Uses React Router 7 and centralized Axios in `frontend/src/services/apiClient.ts`.
-- **Database Architecture:** Async Motor MongoDB driver in `backend/app/database/mongodb.py`. All collections store documents with `user_id: ObjectId`.
+- **Database Architecture:** Async Motor MongoDB driver in `backend/app/database/mongodb.py`. All user documents store `user_id: ObjectId`.
 
 ### Module Mapping & File Responsibilities
 | Feature | Route File (`app/routes/`) | Service File (`app/services/`) | Schema File (`app/schemas/`) | Frontend Page (`frontend/src/pages/`) |
@@ -954,7 +1100,7 @@ npm run build
 3. **Preserve Thinking Mode Disabling:** When calling Qwen for structured JSON, ensure `enable_thinking: false` is maintained. Otherwise, `<think>` tags will break `json_utils.loads_lenient()`.
 4. **Preserve Offline Fallbacks:** When modifying service methods that access MongoDB, maintain the `try ... except ...` fallbacks to `_offline_*` dictionaries to preserve offline demo resilience.
 5. **Run the Verification Suite:**
-   - Backend tests: `pytest tests/ -v` (all 171 tests must pass).
+   - Backend tests: `pytest tests/ -v` (all 221 tests must pass).
    - Frontend validation: `npx tsc -b` and `npx oxlint` must run without errors.
 
 ---
