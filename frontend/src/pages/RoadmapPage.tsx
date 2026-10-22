@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
   Circle,
@@ -15,9 +16,13 @@ import { describeApiError } from '../services/apiClient'
 import * as profileService from '../services/profile'
 import * as roadmapService from '../services/roadmap'
 import * as skillGapService from '../services/skillGap'
+import * as learningService from '../services/learning'
 import type {
+  RoadmapTask,
   RoadmapRequest,
   RoadmapResponse,
+  SkillQuizResponse,
+  SkillQuizResult,
 } from '../types'
 
 export function RoadmapPage() {
@@ -29,8 +34,13 @@ export function RoadmapPage() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
-  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
+  const [startingQuizTaskId, setStartingQuizTaskId] = useState<string | null>(null)
   const [result, setResult] = useState<RoadmapResponse | null>(null)
+  const [quizTask, setQuizTask] = useState<RoadmapTask | null>(null)
+  const [quiz, setQuiz] = useState<SkillQuizResponse | null>(null)
+  const [quizResult, setQuizResult] = useState<SkillQuizResult | null>(null)
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importNotice, setImportNotice] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all')
@@ -124,33 +134,49 @@ export function RoadmapPage() {
     }
   }
 
-  async function handleToggleTask(taskId: string) {
+  async function handleStartQuiz(task: RoadmapTask) {
     if (!result) return
-    const isCompleted = result.completed_tasks.includes(taskId)
-    setTogglingTaskId(taskId)
+    setStartingQuizTaskId(task.id)
     setError(null)
-
-    // Optimistic UI update
-    const prevCompleted = result.completed_tasks
-    const nextCompleted = isCompleted
-      ? prevCompleted.filter((id) => id !== taskId)
-      : [...prevCompleted, taskId]
-
-    setResult({ ...result, completed_tasks: nextCompleted })
-
+    setQuizTask(task)
+    setQuiz(null)
+    setQuizResult(null)
+    setQuizAnswers({})
     try {
-      const updated = await roadmapService.toggleRoadmapTask(
-        result.id,
-        taskId,
-        !isCompleted
-      )
-      setResult(updated)
-    } catch {
-      // Revert on error
-      setResult({ ...result, completed_tasks: prevCompleted })
-      setError('Could not update task status. Please try again.')
+      const response = await learningService.startSkillQuiz(result.id, task.id)
+      setQuiz(response)
+    } catch (err) {
+      setError(describeApiError(err).message)
     } finally {
-      setTogglingTaskId(null)
+      setStartingQuizTaskId(null)
+    }
+  }
+
+  async function handleSubmitQuiz() {
+    if (!quiz) return
+    setIsSubmittingQuiz(true)
+    setError(null)
+    try {
+      const answers = quiz.questions.map((question) => ({
+        question_id: question.id,
+        selected_option: quizAnswers[question.id],
+      }))
+      const outcome = await learningService.submitSkillQuiz(quiz.id, answers)
+      setQuizResult(outcome)
+      if (outcome.passed) {
+        setResult((current) => current
+          ? {
+              ...current,
+              completed_tasks: current.completed_tasks.includes(outcome.task_id)
+                ? current.completed_tasks
+                : [...current.completed_tasks, outcome.task_id],
+            }
+          : current)
+      }
+    } catch (err) {
+      setError(describeApiError(err).message)
+    } finally {
+      setIsSubmittingQuiz(false)
     }
   }
 
@@ -411,6 +437,137 @@ export function RoadmapPage() {
             />
           )}
 
+          {quizTask && (
+            <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
+                    Skill verification · {quizTask.skill || quizTask.title}
+                  </p>
+                  <h2 className="mt-1 text-base font-bold text-slate-900">{quizTask.title}</h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Pass with 70% or higher to verify this skill and update your dashboard.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizTask(null)
+                    setQuiz(null)
+                    setQuizResult(null)
+                    setError(null)
+                  }}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Close
+                </button>
+              </div>
+
+              {error && (
+                <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                  {error}
+                </p>
+              )}
+              {!quiz && !quizResult && startingQuizTaskId === quizTask.id && (
+                <div className="mt-5 flex items-center gap-2 text-xs text-slate-500">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Generating a quiz for this roadmap task…
+                </div>
+              )}
+              {!quiz && !quizResult && startingQuizTaskId !== quizTask.id && error && (
+                <button
+                  type="button"
+                  onClick={() => handleStartQuiz(quizTask)}
+                  className="mt-4 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                >
+                  Retry quiz generation
+                </button>
+              )}
+              {quiz && !quizResult && (
+                <div className="mt-5 space-y-4">
+                  {quiz.questions.map((question, index) => (
+                    <fieldset key={question.id} className="rounded-xl border border-slate-200 p-4">
+                      <legend className="px-1 text-xs font-semibold text-slate-800">
+                        {index + 1}. {question.question}
+                      </legend>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {question.options.map((option, optionIndex) => (
+                          <label
+                            key={`${question.id}-${optionIndex}`}
+                            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-xs transition ${
+                              quizAnswers[question.id] === optionIndex
+                                ? 'border-indigo-400 bg-indigo-50 text-indigo-900'
+                                : 'border-slate-100 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={question.id}
+                              checked={quizAnswers[question.id] === optionIndex}
+                              onChange={() =>
+                                setQuizAnswers((current) => ({
+                                  ...current,
+                                  [question.id]: optionIndex,
+                                }))
+                              }
+                              className="mt-0.5 accent-indigo-600"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleSubmitQuiz}
+                    disabled={
+                      isSubmittingQuiz
+                      || quiz.questions.some((question) => quizAnswers[question.id] === undefined)
+                    }
+                    className="rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSubmittingQuiz ? 'Scoring your answers…' : 'Submit skill test'}
+                  </button>
+                </div>
+              )}
+              {quizResult && (
+                <div className={`mt-5 rounded-xl border p-4 ${
+                  quizResult.passed
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}>
+                  <p className="text-sm font-semibold">
+                    {quizResult.passed ? 'Skill verified!' : 'Keep learning and try again'}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Score: {quizResult.score}% ({quizResult.correct_answers}/{quizResult.total_questions}).
+                    {quizResult.passed
+                      ? ' The roadmap task is complete and your dashboard has been updated.'
+                      : ' You need at least 70% to pass. Review the resources and retake the test.'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!quizResult.passed && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartQuiz(quizTask)}
+                        className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+                      >
+                        Retake skill test
+                      </button>
+                    )}
+                    <Link
+                      to="/"
+                      className="rounded-lg border border-current/20 px-3 py-2 text-xs font-semibold hover:bg-white/50"
+                    >
+                      View updated dashboard
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Phase-by-Phase Roadmap Timeline */}
           <div className="space-y-4">
             {result.roadmap.phases.map((phase) => {
@@ -452,36 +609,23 @@ export function RoadmapPage() {
                   <div className="space-y-2">
                     {phaseTasks.map((task) => {
                       const isCompleted = result.completed_tasks.includes(task.id)
-                      const isToggling = togglingTaskId === task.id
-
                       return (
-                        <div
+                        <article
                           key={task.id}
-                          onClick={() => !isToggling && handleToggleTask(task.id)}
-                          className={`group flex items-start gap-3 rounded-lg border p-3 transition-colors cursor-pointer select-none ${
+                          className={`group flex items-start gap-3 rounded-lg border p-3 transition-colors ${
                             isCompleted
                               ? 'border-emerald-200 bg-emerald-50/20'
                               : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'
                           }`}
                         >
-                          <button
-                            type="button"
-                            disabled={isToggling}
-                            className="mt-0.5 shrink-0 text-slate-400 group-hover:text-slate-600 transition"
-                          >
-                            {isCompleted ? (
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            ) : (
-                              <Circle className="h-4 w-4 text-slate-300 group-hover:text-slate-500" />
-                            )}
-                          </button>
+                          {isCompleted
+                            ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                            : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />}
 
                           <div className="flex-1 space-y-1">
                             <div className="flex items-start justify-between gap-2">
                               <p
-                                className={`text-xs font-medium leading-snug ${
-                                  isCompleted ? 'text-slate-400 line-through' : 'text-slate-900'
-                                }`}
+                                className="text-xs font-medium leading-snug text-slate-900"
                               >
                                 {task.title}
                               </p>
@@ -520,7 +664,22 @@ export function RoadmapPage() {
                               )}
                             </div>
                           </div>
-                        </div>
+                          {!isCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartQuiz(task)}
+                              disabled={startingQuizTaskId === task.id}
+                              className="shrink-0 self-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
+                            >
+                              {startingQuizTaskId === task.id ? 'Preparing…' : 'Take skill test'}
+                            </button>
+                          )}
+                          {isCompleted && (
+                            <span className="shrink-0 self-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold text-emerald-800">
+                              Skill verified
+                            </span>
+                          )}
+                        </article>
                       )
                     })}
 

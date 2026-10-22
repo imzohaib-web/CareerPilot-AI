@@ -40,7 +40,16 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 |--------|------|--------|-------------|
 | POST | /api/roadmap/generate | IMPLEMENTED | Generate personalized roadmap from skill gaps (AI) |
 | GET | /api/roadmap/latest | IMPLEMENTED | Fetch the user's latest roadmap |
-| PUT | /api/roadmap/{roadmap_id}/tasks/{task_id}/toggle | IMPLEMENTED | Toggle a roadmap task's completion |
+| PUT | /api/roadmap/{roadmap_id}/tasks/{task_id}/toggle | DEPRECATED | Completion is assessment-gated; returns 409 |
+
+## LEARNING TRACKER & ALERTS
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/learning/roadmaps/{roadmap_id}/tasks/{task_id}/assessment | Generate a ten-question quiz for an owned roadmap task |
+| POST | /api/learning/assessments/{assessment_id}/submit | Grade answers; a score of 70% or more verifies the skill and completes the task |
+| GET | /api/alerts | List the signed-in user's learning alerts and unread count |
+| PUT | /api/alerts/{alert_id}/read | Mark an owned learning alert as read |
 
 ## CAREER MENTOR (CHAT)
 
@@ -72,7 +81,7 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| GET | /api/progress | IMPLEMENTED | Dashboard summary (profile, resume, roadmap, interview status) |
+| GET | /api/progress | IMPLEMENTED | Dashboard summary, including assessment-verified skills |
 
 ## SYSTEM
 

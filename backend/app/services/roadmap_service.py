@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
+from fastapi import HTTPException, status
 from pydantic import ValidationError
 
 from app.database.mongodb import get_db
@@ -118,6 +119,7 @@ async def generate_roadmap(user_id: str, payload: RoadmapRequest) -> RoadmapResp
         "weekly_hours": payload.weekly_hours,
         "roadmap": content.model_dump(),
         "completed_tasks": [],
+        "verified_tasks": [],
         "sources": [s.model_dump() for s in retrieved_sources],
         "model": model,
         "created_at": now,
@@ -165,51 +167,16 @@ async def get_latest_roadmap(user_id: str) -> Optional[RoadmapResponse]:
 async def toggle_task(
     user_id: str, roadmap_id: str, task_id: str, completed: bool
 ) -> RoadmapResponse:
-    """Toggle a task completion status within a roadmap."""
-    oid = ObjectId(roadmap_id)
-    u_oid = ObjectId(user_id)
-
-    db_updated = False
-    doc = None
-    try:
-        db = get_db()
-        if completed:
-            doc = await db.roadmaps.find_one_and_update(
-                {"_id": oid, "user_id": u_oid},
-                {"$addToSet": {"completed_tasks": task_id}},
-                return_document=True,
-            )
-        else:
-            doc = await db.roadmaps.find_one_and_update(
-                {"_id": oid, "user_id": u_oid},
-                {"$pull": {"completed_tasks": task_id}},
-                return_document=True,
-            )
-        if doc:
-            db_updated = True
-    except Exception as exc:
-        logger.warning("MongoDB update failed for roadmap task toggle (%s)", exc)
-
-    if not db_updated:
-        # Fall back to in-memory cache
-        if user_id in _offline_roadmaps:
-            doc = _offline_roadmaps[user_id]
-            if str(doc.get("_id")) == roadmap_id:
-                completed_list = doc.setdefault("completed_tasks", [])
-                if completed and task_id not in completed_list:
-                    completed_list.append(task_id)
-                elif not completed and task_id in completed_list:
-                    completed_list.remove(task_id)
-
-    if not doc:
-        raise AIServiceError("Roadmap not found or unauthorized")
-
-    try:
-        content = RoadmapContent.model_validate(doc.get("roadmap", {}))
-    except Exception:
-        content = RoadmapContent()
-
-    return _serialize(doc, content)
+    """Prevent manual task completion without a passing assessment."""
+    if completed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pass the roadmap skill assessment to complete this task.",
+        )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Task completion can only be changed through a passed skill assessment.",
+    )
 
 
 async def _call_and_parse(
@@ -316,7 +283,7 @@ def _serialize(
         time_frame_weeks=doc.get("time_frame_weeks", 8),
         weekly_hours=doc.get("weekly_hours", 10),
         roadmap=content,
-        completed_tasks=doc.get("completed_tasks", []),
+        completed_tasks=doc.get("verified_tasks", []),
         sources=final_sources,
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
     )

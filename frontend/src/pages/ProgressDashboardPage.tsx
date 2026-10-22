@@ -80,8 +80,19 @@ export function ProgressDashboardPage() {
     const profileSkills = data.profile.skills ?? []
     const resumeSkills = data.resume.skills_detected ?? []
     const seen = new Set<string>()
-    const result: { name: string; source: 'profile' | 'resume' }[] = []
+    const result: {
+      name: string
+      source: 'profile' | 'resume' | 'verified'
+      score?: number
+    }[] = []
 
+    for (const skill of data.verified_skills ?? []) {
+      const key = skill.name.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({ name: skill.name, source: 'verified', score: skill.score })
+      }
+    }
     for (const s of profileSkills) {
       const key = s.toLowerCase()
       if (!seen.has(key)) {
@@ -517,7 +528,7 @@ export function ProgressDashboardPage() {
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Skills Inventory</h3>
               <p className="text-xs text-slate-500">
-                Aggregated from profile and extracted resume data.
+                Includes skills proven through roadmap skill tests.
               </p>
             </div>
             <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -532,22 +543,32 @@ export function ProgressDashboardPage() {
                   <span
                     key={skill.name}
                     className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
-                      skill.source === 'resume'
-                        ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                        : 'bg-white text-slate-700 border border-slate-200'
+                      skill.source === 'verified'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : skill.source === 'resume'
+                          ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                          : 'bg-white text-slate-700 border border-slate-200'
                     }`}
                   >
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        skill.source === 'resume' ? 'bg-indigo-600' : 'bg-slate-400'
+                        skill.source === 'verified'
+                          ? 'bg-emerald-600'
+                          : skill.source === 'resume' ? 'bg-indigo-600' : 'bg-slate-400'
                       }`}
                     />
-                    {skill.name}
+                    {skill.source === 'verified'
+                      ? `✓ ${skill.name} · ${skill.score}%`
+                      : skill.name}
                   </span>
                 ))}
               </div>
 
               <div className="flex items-center gap-4 pt-2 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                  Test verified
+                </span>
                 <span className="flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
                   Verified via Resume
@@ -566,6 +587,19 @@ export function ProgressDashboardPage() {
             </div>
           )}
         </div>
+
+        <Link
+          to="/alerts"
+          className="clean-card flex items-center justify-between gap-4 p-4 transition hover:border-indigo-300 hover:bg-indigo-50/40"
+        >
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Learning alerts</h3>
+            <p className="mt-1 text-xs text-slate-600">
+              Assessment results and newly verified skill updates.
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+        </Link>
 
         {/* Priority Actions */}
         <div className="clean-card p-5 sm:p-6 flex flex-col justify-between">

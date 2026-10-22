@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { AppLayout } from './layouts/AppLayout'
 import { CareerMentorPage } from './pages/CareerMentorPage'
+import { LearningAlertsPage } from './pages/LearningAlertsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MockInterviewPage } from './pages/MockInterviewPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -33,6 +34,7 @@ function App() {
             <Route path="/resume" element={<ResumeAnalyzerPage />} />
             <Route path="/skill-gap" element={<SkillGapPage />} />
             <Route path="/roadmap" element={<RoadmapPage />} />
+            <Route path="/alerts" element={<LearningAlertsPage />} />
             <Route path="/mentor" element={<CareerMentorPage />} />
             <Route path="/interview" element={<MockInterviewPage />} />
             <Route path="/rag" element={<RagKnowledgePage />} />

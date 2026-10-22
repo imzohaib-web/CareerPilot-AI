@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Compass,
+  Bell,
 } from 'lucide-react'
 
 import { useAuth } from '../context/AuthContext'
@@ -29,6 +30,7 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
   { to: '/resume', label: 'Resume', icon: FileText },
   { to: '/skill-gap', label: 'Skill Gap', icon: Target },
   { to: '/roadmap', label: 'Roadmap', icon: Map },
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/mentor', label: 'Mentor', icon: MessageSquare },
   { to: '/interview', label: 'Mock Interview', icon: Video },
   { to: '/rag', label: 'RAG Advisor', icon: BookOpen },

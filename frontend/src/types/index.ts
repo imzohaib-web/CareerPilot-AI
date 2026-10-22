@@ -215,9 +215,61 @@ export interface DashboardResponse {
   resume: ResumeProgress
   roadmap?: RoadmapProgress
   interview?: InterviewProgress
+  verified_skills: VerifiedSkill[]
   readiness_score: number
   overall_progress: number
   next_steps: NextStep[]
+}
+
+export interface VerifiedSkill {
+  name: string
+  score: number
+  verified_at: string
+}
+
+export interface SkillQuizQuestion {
+  id: string
+  question: string
+  options: string[]
+}
+
+export interface SkillQuizResponse {
+  id: string
+  roadmap_id: string
+  task_id: string
+  skill: string
+  questions: SkillQuizQuestion[]
+}
+
+export interface SkillQuizAnswer {
+  question_id: string
+  selected_option: number
+}
+
+export interface SkillQuizResult {
+  id: string
+  task_id: string
+  skill: string
+  score: number
+  passed: boolean
+  correct_answers: number
+  total_questions: number
+  completed_at: string
+}
+
+export interface LearningAlert {
+  id: string
+  title: string
+  message: string
+  category: string
+  is_read: boolean
+  email_status: string
+  created_at: string
+}
+
+export interface LearningAlertsResponse {
+  alerts: LearningAlert[]
+  unread_count: number
 }
 
 // ── Mock Interview ───────────────────────────────────────────────────────
