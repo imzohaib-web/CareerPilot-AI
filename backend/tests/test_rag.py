@@ -1083,4 +1083,86 @@ async def test_evaluation_harness_runs_end_to_end(tmp_path):
     assert "Overall Performance Benchmark" in content
 
 
+@pytest.mark.asyncio
+async def test_get_documents_endpoint_returns_expected_shape():
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(_override_user())
+
+    mock_docs = [
+        DocumentInfo(
+            id="doc-global-1",
+            user_id=None,
+            title="Global Role Matrix",
+            category="role_matrix",
+            chunk_count=3,
+            content_length=1500,
+            scope="global",
+            created_at=datetime.now(timezone.utc),
+            deletable=False,
+        ),
+        DocumentInfo(
+            id="doc-user-1",
+            user_id=str(FAKE_USER_ID),
+            title="User Custom Resume",
+            category="general",
+            chunk_count=2,
+            content_length=900,
+            scope="user",
+            created_at=datetime.now(timezone.utc),
+            deletable=True,
+        ),
+    ]
+
+    with patch("app.services.rag_service.list_user_documents", new=AsyncMock(return_value=mock_docs)):
+        async with _make_api_client() as client:
+            resp = await client.get("/api/rag/documents")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, list)
+            assert len(data) == 2
+
+            # Check global doc shape
+            global_doc = data[0]
+            assert global_doc["id"] == "doc-global-1"
+            assert global_doc["scope"] == "global"
+            assert global_doc["category"] == "role_matrix"
+            assert global_doc["chunk_count"] == 3
+            assert global_doc["deletable"] is False
+            assert "created_at" in global_doc
+
+            # Check user doc shape
+            user_doc = data[1]
+            assert user_doc["id"] == "doc-user-1"
+            assert user_doc["scope"] == "user"
+            assert user_doc["category"] == "general"
+            assert user_doc["chunk_count"] == 2
+            assert user_doc["deletable"] is True
+            assert "created_at" in user_doc
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_reports_storage_mode():
+    async with _make_api_client() as client:
+        resp = await client.get("/api/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "storage_mode" in data
+        assert data["storage_mode"] in ("mongodb", "memory")
+        assert "status" in data
+        assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_base_stats_includes_storage_mode():
+    async with _make_api_client() as client:
+        resp = await client.get("/api/rag/knowledge-base/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "storage_mode" in data
+        assert data["storage_mode"] in ("mongodb", "memory")
+        assert "global_documents" in data
+        assert "categories" in data
+
+
+
 

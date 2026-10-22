@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
-from app.database.mongodb import get_db
+from app.database.mongodb import get_db, is_connected
 from app.schemas.auth import UserResponse
 from app.services.security import hash_password, verify_password
 
@@ -97,5 +97,14 @@ async def get_user_by_id(user_id: str) -> dict | None:
     for user_doc in _offline_users.values():
         if user_doc["_id"] == oid:
             return user_doc
+
+    if not is_connected():
+        # In offline/memory mode, synthesize a valid user object for valid JWTs
+        return {
+            "_id": oid,
+            "email": f"user_{str(oid)[:8]}@offline.local",
+            "name": "Offline User",
+            "created_at": datetime.now(timezone.utc),
+        }
 
     return None
