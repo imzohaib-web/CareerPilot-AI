@@ -580,13 +580,16 @@ async def seed_knowledge(
 async def seed_knowledge_background(
     knowledge_dir: Path | str | None = None,
     force: bool = False,
+    offline: bool = False,
 ) -> None:
     """Non-blocking background wrapper invoked during FastAPI startup."""
     try:
-        logger.info("Initiating non-blocking background knowledge base seed...")
-        res = await seed_knowledge(knowledge_dir=knowledge_dir, force=force)
+        mode_label = "in-memory store" if offline else "MongoDB"
+        logger.info("Initiating non-blocking background knowledge base seed into %s...", mode_label)
+        res = await seed_knowledge(knowledge_dir=knowledge_dir, force=force, offline=offline)
         logger.info(
-            "Knowledge base background seed finished successfully: seeded=%s, skipped=%s, total_docs=%s",
+            "Knowledge base background seed finished successfully (%s): seeded=%s, skipped=%s, total_docs=%s",
+            mode_label,
             res.get("seeded"),
             res.get("skipped"),
             res.get("total_documents"),
@@ -608,6 +611,8 @@ async def get_knowledge_base_stats(db=None) -> KnowledgeBaseStats:
     use_db = False
     doc_count = 0
     chunk_count = 0
+    user_doc_count = 0
+    user_chunk_count = 0
     categories: dict[str, int] = {}
     chunks_by_cat: dict[str, int] = {}
     last_seeded = _last_seeded_at
@@ -617,6 +622,8 @@ async def get_knowledge_base_stats(db=None) -> KnowledgeBaseStats:
             if hasattr(db, "rag_documents"):
                 doc_count = await db.rag_documents.count_documents({"scope": "global"})
                 chunk_count = await db.rag_chunks.count_documents({"scope": "global"})
+                user_doc_count = await db.rag_documents.count_documents({"scope": "user"})
+                user_chunk_count = await db.rag_chunks.count_documents({"scope": "user"})
 
                 cat_pipe = [
                     {"$match": {"scope": "global"}},
@@ -653,8 +660,12 @@ async def get_knowledge_base_stats(db=None) -> KnowledgeBaseStats:
     if not use_db:
         global_docs = [d for d in _offline_rag_docs.values() if d.get("scope") == "global"]
         global_chunks = [c for c in _offline_rag_chunks.values() if c.get("scope") == "global"]
+        user_docs = [d for d in _offline_rag_docs.values() if d.get("scope") != "global"]
+        user_chunks = [c for c in _offline_rag_chunks.values() if c.get("scope") != "global"]
         doc_count = len(global_docs)
         chunk_count = len(global_chunks)
+        user_doc_count = len(user_docs)
+        user_chunk_count = len(user_chunks)
         for d in global_docs:
             cat = str(d.get("category", "general"))
             categories[cat] = categories.get(cat, 0) + 1
@@ -666,11 +677,24 @@ async def get_knowledge_base_stats(db=None) -> KnowledgeBaseStats:
     if _is_seeding:
         status_str = "seeding"
 
+    cat_list = sorted(list(categories.keys()))
+
     return KnowledgeBaseStats(
         total_documents=doc_count,
         total_chunks=chunk_count,
+        global_documents=doc_count,
+        global_chunks=chunk_count,
+        user_documents=user_doc_count,
+        user_chunks=user_chunk_count,
         categories=categories,
+        category_list=cat_list,
         chunks_by_category=chunks_by_cat,
         last_seeded_at=last_seeded,
+        last_updated=last_seeded,
+        embedding_model=config.EMBEDDING_MODEL,
+        vector_dimension=config.EMBEDDING_DIMENSIONS,
+        retrieval_backend="atlas" if use_db else "memory",
+        storage_mode="mongodb" if use_db else "memory",
+        database_name=config.MONGODB_NAME if use_db else None,
         status=status_str,
     )

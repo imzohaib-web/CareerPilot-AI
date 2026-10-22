@@ -272,6 +272,42 @@ export interface LearningAlertsResponse {
   unread_count: number
 }
 
+export interface StudyDayRecord {
+  date: string
+  minutes: number
+  note: string
+  updated_at: string
+}
+
+export interface StudyCalendarResponse {
+  roadmap_id: string
+  roadmap_title: string
+  roadmap_start_date: string
+  month: string
+  timezone: string
+  storage_mode: 'mongodb' | 'memory'
+  days: StudyDayRecord[]
+  missed_day_threshold: number
+  active_missed_days: number
+  missed_alert: string | null
+}
+
+export interface StudyDayUpdate {
+  completed: boolean
+  minutes: number
+  note: string
+}
+
+export interface StudyPreferencesUpdate {
+  missed_day_threshold: number
+  timezone: string
+}
+
+export interface StudyPreferencesResponse {
+  missed_day_threshold: number
+  timezone: string
+}
+
 // ── Mock Interview ───────────────────────────────────────────────────────
 
 export interface InterviewQuestion {
@@ -347,33 +383,50 @@ export interface CitationRef {
 }
 
 export interface KnowledgeBaseStats {
+  total_documents?: number
+  total_chunks?: number
   global_documents: number
   global_chunks: number
   user_documents: number
   user_chunks: number
   categories: string[]
+  categories_map?: Record<string, number>
+  category_list?: string[]
   embedding_model: string
   vector_dimension: number
   retrieval_backend: string
+  storage_mode?: 'mongodb' | 'memory' | string
+  database_name?: string | null
   last_updated: string | null
+  last_seeded_at?: string | null
+  status?: string
 }
 
 export interface DocumentIngestRequest {
   title: string
   content: string
-  category?: 'job_description' | 'interview_guide' | 'skill_framework' | 'general'
+  category?:
+    | 'job_description'
+    | 'interview_guide'
+    | 'skill_framework'
+    | 'role_matrix'
+    | 'learning_path'
+    | 'career_guide'
+    | 'general'
+    | string
   metadata?: Record<string, unknown>
 }
 
 export interface DocumentInfo {
   id: string
-  user_id: string
+  user_id: string | null
   title: string
   category: string
   chunk_count: number
   content_length: number
   created_at: string
   scope?: 'global' | 'user' | string
+  deletable?: boolean
 }
 
 export interface DocumentUploadResponse {

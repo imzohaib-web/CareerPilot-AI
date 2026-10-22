@@ -735,9 +735,18 @@ async def list_user_documents(user_id: str, db=None) -> list[DocumentInfo]:
     if db is not None:
         try:
             if hasattr(db, "rag_documents"):
-                cursor = db.rag_documents.find(
-                    {"$or": [{"user_id": user_id}, {"scope": "global"}]}
-                ).sort("created_at", -1)
+                or_clauses: list[dict[str, Any]] = [
+                    {"scope": "global"},
+                    {"user_id": user_id},
+                ]
+                try:
+                    from bson import ObjectId
+                    if ObjectId.is_valid(user_id):
+                        or_clauses.append({"user_id": ObjectId(user_id)})
+                except Exception:
+                    pass
+
+                cursor = db.rag_documents.find({"$or": or_clauses}).sort("created_at", -1)
                 docs = await cursor.to_list(length=100)
         except Exception:
             docs = []
@@ -758,16 +767,22 @@ async def list_user_documents(user_id: str, db=None) -> list[DocumentInfo]:
             except Exception:
                 created = datetime.now(timezone.utc)
 
+        doc_scope = d.get("scope", "user")
+        doc_uid = d.get("user_id")
+        is_global = doc_scope == "global"
+        can_delete = (not is_global) and (doc_uid is not None and str(doc_uid) == str(user_id))
+
         result.append(
             DocumentInfo(
                 id=str(d.get("_id", d.get("id"))),
-                user_id=d.get("user_id"),
+                user_id=str(doc_uid) if doc_uid is not None else None,
                 title=str(d.get("title", "Untitled")),
                 category=str(d.get("category", "general")),
                 chunk_count=int(d.get("chunk_count", 0)),
                 content_length=int(d.get("content_length", 0)),
-                scope=d.get("scope", "user"),
+                scope=doc_scope,
                 created_at=created or datetime.now(timezone.utc),
+                deletable=can_delete,
             )
         )
     return result

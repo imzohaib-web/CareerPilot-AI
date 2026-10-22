@@ -40,6 +40,7 @@ class DocumentInfo(BaseModel):
     content_length: int
     scope: Literal["global", "user"] = Field(default="user", description="Document visibility scope")
     created_at: datetime
+    deletable: bool = Field(default=False, description="Whether the document can be deleted by the requesting user")
 
 
 class DocumentUploadResponse(BaseModel):
@@ -124,7 +125,18 @@ class RAGChatResponse(BaseModel):
 class KnowledgeBaseStats(BaseModel):
     total_documents: int = Field(default=0, description="Total number of global knowledge base documents")
     total_chunks: int = Field(default=0, description="Total number of global knowledge base chunks")
+    global_documents: int = Field(default=0, description="Count of global curated documents")
+    global_chunks: int = Field(default=0, description="Count of global curated chunks")
+    user_documents: int = Field(default=0, description="Count of user-uploaded documents")
+    user_chunks: int = Field(default=0, description="Count of user-uploaded chunks")
     categories: dict[str, int] = Field(default_factory=dict, description="Document counts grouped by category")
+    category_list: list[str] = Field(default_factory=list, description="List of unique category names")
     chunks_by_category: dict[str, int] = Field(default_factory=dict, description="Chunk counts grouped by category")
     last_seeded_at: datetime | None = Field(default=None, description="Timestamp of the most recent seed execution")
+    last_updated: datetime | None = Field(default=None, description="Timestamp of the most recent update")
+    embedding_model: str = Field(default="text-embedding-v3", description="Active embedding model name")
+    vector_dimension: int = Field(default=1024, description="Embedding vector dimension")
+    retrieval_backend: str = Field(default="atlas", description="Retrieval backend in use ('atlas' or 'memory')")
+    storage_mode: str = Field(default="mongodb", description="Storage mode: 'mongodb' or 'memory'")
+    database_name: str | None = Field(default="careerpilot_ai", description="Name of the active database")
     status: str = Field(default="ready", description="Knowledge base readiness status (ready, seeding, unseeded, error)")

@@ -1,6 +1,8 @@
 """Authenticated roadmap assessment and learning-alert routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.core.rate_limit import high_cost_rate_limit, limiter, require_high_cost_quota
 from app.schemas.learning import (
@@ -11,11 +13,56 @@ from app.schemas.learning import (
     SkillQuizSubmission,
     VerifiedSkill,
 )
+from app.schemas.study_tracker import (
+    StudyCalendarResponse,
+    StudyDayUpdate,
+    StudyPreferencesResponse,
+    StudyPreferencesUpdate,
+)
 from app.services import learning_service
+from app.services import study_tracker_service
 from app.services.ai.qwen_service import AIServiceError
 from app.services.dependencies import get_current_user
 
 router = APIRouter(tags=["learning"])
+
+
+@router.get("/api/learning/calendar", response_model=StudyCalendarResponse)
+async def get_study_calendar(
+    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    timezone_name: str = Query(default="UTC", alias="timezone", min_length=1, max_length=64),
+    current_user: dict = Depends(get_current_user),
+) -> StudyCalendarResponse:
+    """Return the signed-in user's roadmap study log and missed-day status."""
+    return await study_tracker_service.get_calendar(
+        str(current_user["_id"]), month, timezone_name
+    )
+
+
+@router.put(
+    "/api/learning/calendar/preferences",
+    response_model=StudyPreferencesResponse,
+)
+async def update_study_preferences(
+    payload: StudyPreferencesUpdate,
+    current_user: dict = Depends(get_current_user),
+) -> StudyPreferencesResponse:
+    """Set the user's missed-learning-day alert threshold."""
+    return await study_tracker_service.update_preferences(
+        str(current_user["_id"]), payload
+    )
+
+
+@router.put("/api/learning/calendar/{study_date}", status_code=204)
+async def update_study_day(
+    study_date: date,
+    payload: StudyDayUpdate,
+    current_user: dict = Depends(get_current_user),
+) -> None:
+    """Mark or unmark one calendar day for the signed-in user's latest roadmap."""
+    await study_tracker_service.update_study_day(
+        str(current_user["_id"]), study_date, payload
+    )
 
 
 @router.post(
@@ -64,6 +111,7 @@ async def get_learning_alerts(
     current_user: dict = Depends(get_current_user),
 ) -> LearningAlertsResponse:
     """List learning alerts for the authenticated user."""
+    await study_tracker_service.refresh_missed_alert(str(current_user["_id"]))
     return await learning_service.get_alerts(str(current_user["_id"]))
 
 

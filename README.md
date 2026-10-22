@@ -1064,6 +1064,46 @@ npm run build
 
 ---
 
+### 19.1 Local Development Troubleshooting
+
+When running CareerPilot AI locally, use the following checklist to diagnose connectivity, storage modes, and knowledge base synchronization:
+
+1. **Verify Storage Mode & Database Connectivity:**
+   - Query the health endpoint:
+     ```bash
+     curl http://localhost:8000/api/health
+     ```
+   - Inspect the returned JSON:
+     - `storage_mode: "mongodb"`: Connected to MongoDB Atlas cluster.
+     - `storage_mode: "memory"`: Backend is running in resilient in-memory fallback mode. Check `error_category` for the sanitized root cause (`server_selection_timeout`, `dns_resolution_failed`, or `authentication_failed`).
+
+2. **MongoDB Atlas IP Access List (Whitelist):**
+   - If `error_category` reports `server_selection_timeout`, your current local IP address is not whitelisted in MongoDB Atlas.
+   - Navigate to **MongoDB Atlas Console -> Network Access -> IP Access List**.
+   - Add your current IP address (or `0.0.0.0/0` for development testing).
+
+3. **Seeding the Knowledge Base:**
+   - When running against MongoDB Atlas or populating vector search indexes:
+     ```bash
+     cd backend
+     python -m scripts.seed_knowledge
+     ```
+   - For offline/in-memory mode, CareerPilot AI automatically seeds the 34 local Markdown knowledge files into memory in a non-blocking background task at startup.
+
+4. **Confirming Knowledge Base Counts & Index Verification:**
+   - Run the automated verification script:
+     ```bash
+     cd backend
+     python -m scripts.verify_vector_search
+     ```
+   - Expected status:
+     - Curated global documents: `34`
+     - Curated vector chunks: `72`
+     - Search index: `rag_vector_index` active on `rag_chunks` collection.
+   - You can also check `/api/rag/knowledge-base/stats` or inspect the **Knowledge Base** tab in the UI.
+
+---
+
 ## 20. Context for AI Assistants
 
 > **Notice for AI Assistants (ChatGPT, Claude, Gemini, Cursor, Copilot, etc.):**  

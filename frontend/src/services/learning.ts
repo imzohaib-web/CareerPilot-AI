@@ -5,6 +5,10 @@ import type {
   SkillQuizAnswer,
   SkillQuizResponse,
   SkillQuizResult,
+  StudyCalendarResponse,
+  StudyDayUpdate,
+  StudyPreferencesResponse,
+  StudyPreferencesUpdate,
 } from '../types'
 
 export async function startSkillQuiz(
@@ -35,5 +39,32 @@ export async function fetchLearningAlerts(): Promise<LearningAlertsResponse> {
 
 export async function markLearningAlertRead(alertId: string): Promise<LearningAlert> {
   const response = await apiClient.put<LearningAlert>(`/api/alerts/${alertId}/read`)
+  return response.data
+}
+
+export async function fetchStudyCalendar(
+  month: string,
+  timezone: string,
+): Promise<StudyCalendarResponse> {
+  const response = await apiClient.get<StudyCalendarResponse>('/api/learning/calendar', {
+    params: { month, timezone },
+  })
+  return response.data
+}
+
+export async function updateStudyDay(
+  day: string,
+  update: StudyDayUpdate,
+): Promise<void> {
+  await apiClient.put(`/api/learning/calendar/${day}`, update)
+}
+
+export async function updateStudyPreferences(
+  update: StudyPreferencesUpdate,
+): Promise<StudyPreferencesResponse> {
+  const response = await apiClient.put<StudyPreferencesResponse>(
+    '/api/learning/calendar/preferences',
+    update,
+  )
   return response.data
 }

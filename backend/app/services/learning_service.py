@@ -181,6 +181,9 @@ async def get_verified_skills(user_id: str) -> list[VerifiedSkill]:
 
 async def get_alerts(user_id: str) -> LearningAlertsResponse:
     """Return recent alerts scoped to the authenticated user."""
+    from app.services.study_tracker_service import refresh_missed_alert
+
+    await refresh_missed_alert(user_id)
     try:
         cursor = get_db().learning_alerts.find({"user_id": ObjectId(user_id)}).sort(
             "created_at", -1

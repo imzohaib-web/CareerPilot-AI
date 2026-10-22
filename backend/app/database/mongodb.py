@@ -33,11 +33,39 @@ _client: AsyncIOMotorClient | None = None
 _connect_lock: asyncio.Lock | None = None
 _last_attempt: float = 0.0
 _uri_missing_logged: bool = False
+_last_connection_error_category: str | None = None
 
 # Minimum seconds between lazy reconnection attempts (driven by /api/health).
 _RETRY_INTERVAL_SECONDS = 10.0
 # Atlas server-selection window; fails fast enough for health checks.
 _SERVER_SELECTION_TIMEOUT_MS = 5000
+
+
+def is_connected() -> bool:
+    """Check if Motor client is active and connected."""
+    return _client is not None
+
+
+def get_connection_status() -> dict[str, str]:
+    """Return minimal sanitized connection status for the public unauthenticated health probe."""
+    connected = _client is not None
+    return {
+        "status": "ok",
+        "database": "connected" if connected else "disconnected",
+        "storage_mode": "mongodb" if connected else "memory",
+    }
+
+
+def get_connection_details() -> dict[str, str | None]:
+    """Return full diagnostic metadata for the authenticated health check details endpoint."""
+    connected = _client is not None
+    return {
+        "status": "ok",
+        "database": "connected" if connected else "disconnected",
+        "storage_mode": "mongodb" if connected else "memory",
+        "database_name": config.MONGODB_NAME if connected else None,
+        "error_category": _last_connection_error_category if not connected else None,
+    }
 
 
 def _enable_public_dns_fallback() -> None:
@@ -53,10 +81,20 @@ def _enable_public_dns_fallback() -> None:
         resolver.nameservers = public + [
             ns for ns in resolver.nameservers if ns not in public
         ]
+        resolver.lifetime = 3.0
+        resolver.timeout = 2.0
         dns.resolver.default_resolver = resolver
         logger.info("Enabled public DNS fallback for MongoDB SRV resolution")
     except Exception:
         logger.debug("Could not enable public DNS fallback")
+
+
+try:
+    if hasattr(dns.resolver, "default_resolver") and dns.resolver.default_resolver is not None:
+        dns.resolver.default_resolver.lifetime = 4.0
+        dns.resolver.default_resolver.timeout = 3.0
+except Exception:
+    pass
 
 
 def _is_dns_error(exc: Exception) -> bool:
@@ -109,10 +147,13 @@ async def connect_db() -> bool:
     health endpoint instead of requiring a restart.
     """
     global _connect_lock, _last_attempt, _uri_missing_logged
+    global _connect_lock, _last_attempt, _uri_missing_logged, _last_connection_error_category
     if _client is not None:
+        _last_connection_error_category = None
         return True
 
     if not config.MONGODB_URI:
+        _last_connection_error_category = "uri_missing: MONGODB_URI is not configured"
         if not _uri_missing_logged:
             logger.warning(
                 "MONGODB_URI is not configured; running in offline mode "
@@ -124,24 +165,33 @@ async def connect_db() -> bool:
     now = time.monotonic()
     if _last_attempt and (now - _last_attempt) < _RETRY_INTERVAL_SECONDS:
         return False
-    _last_attempt = now
 
     if _connect_lock is None:
         _connect_lock = asyncio.Lock()
     async with _connect_lock:
         if _client is not None:
+            _last_connection_error_category = None
             return True
+        now = time.monotonic()
+        if _last_attempt and (now - _last_attempt) < _RETRY_INTERVAL_SECONDS:
+            return False
+        _last_attempt = now
         logger.info(
             "MongoDB connection attempt started (uri_configured=true, "
             "database=%s)",
             config.MONGODB_NAME,
         )
-        return await _attempt_connect()
+        try:
+            return await _attempt_connect()
+        finally:
+            _last_attempt = time.monotonic()
 
 
 async def _attempt_connect() -> bool:
     """Create the Motor client, verify connectivity with a ping, set ``_client``."""
-    global _client
+    global _client, _last_connection_error_category
+    if config.MONGODB_URI and config.MONGODB_URI.startswith("mongodb+srv://"):
+        _enable_public_dns_fallback()
     try:
         client = AsyncIOMotorClient(
             config.MONGODB_URI,
@@ -149,6 +199,7 @@ async def _attempt_connect() -> bool:
         )
     except Exception as exc:
         category = _classify_error(exc)
+        _last_connection_error_category = category
         if _is_dns_error(exc):
             # One retry through public resolvers — fixes local networks whose
             # DNS cannot resolve Atlas SRV records without forcing public DNS
@@ -165,9 +216,11 @@ async def _attempt_connect() -> bool:
                     serverSelectionTimeoutMS=_SERVER_SELECTION_TIMEOUT_MS,
                 )
             except Exception as retry_exc:
+                retry_cat = _classify_error(retry_exc)
+                _last_connection_error_category = retry_cat
                 logger.warning(
                     "MongoDB connection failed (%s); running in offline mode",
-                    _classify_error(retry_exc),
+                    retry_cat,
                 )
                 return False
         else:
@@ -181,13 +234,45 @@ async def _attempt_connect() -> bool:
         await client.admin.command("ping")
     except Exception as exc:
         client.close()
+        category = _classify_error(exc)
+        _last_connection_error_category = category
+        if _is_dns_error(exc):
+            logger.warning(
+                "MongoDB ping failed (%s); retrying with public DNS resolvers",
+                category,
+            )
+            _enable_public_dns_fallback()
+            try:
+                retry_client = AsyncIOMotorClient(
+                    config.MONGODB_URI,
+                    serverSelectionTimeoutMS=_SERVER_SELECTION_TIMEOUT_MS,
+                )
+                await retry_client.admin.command("ping")
+                _client = retry_client
+                _last_connection_error_category = None
+                logger.info(
+                    "Connected to MongoDB database '%s' via public DNS (ping=ok)",
+                    config.MONGODB_NAME,
+                )
+                await _ensure_indexes()
+                return True
+            except Exception as retry_exc:
+                retry_client.close()
+                _last_connection_error_category = _classify_error(retry_exc)
+                logger.warning(
+                    "MongoDB connection retry failed (%s); running in offline mode",
+                    _last_connection_error_category,
+                )
+                return False
+
         logger.warning(
             "MongoDB ping failed (%s); running in offline mode",
-            _classify_error(exc),
+            category,
         )
         return False
 
     _client = client
+    _last_connection_error_category = None
     logger.info(
         "Connected to MongoDB database '%s' (ping=ok)", config.MONGODB_NAME
     )
@@ -219,6 +304,13 @@ async def _ensure_indexes() -> None:
             [("user_id", 1), ("skill_key", 1)], unique=True
         )
         await db.learning_alerts.create_index([("user_id", 1), ("created_at", -1)])
+        await db.learning_alerts.create_index(
+            [("user_id", 1), ("dedupe_key", 1)], unique=True, sparse=True
+        )
+        await db.learning_days.create_index(
+            [("user_id", 1), ("roadmap_id", 1), ("date", 1)], unique=True
+        )
+        await db.learning_preferences.create_index("user_id", unique=True)
         await db.interviews.create_index("user_id")
         await db.rag_documents.create_index("user_id")
         await db.rag_chunks.create_index([("document_id", 1), ("user_id", 1)])

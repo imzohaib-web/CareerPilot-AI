@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  ArrowRight,
   CheckCircle2,
   Circle,
   Clock,
@@ -406,6 +407,15 @@ export function RoadmapPage() {
                 style={{ width: `${Math.max(percentage, 2)}%` }}
               />
             </div>
+
+            <Link
+              to="/calendar"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 text-xs font-semibold text-brand-800 transition hover:border-brand-300 hover:bg-brand-100"
+            >
+              <Calendar className="h-4 w-4" aria-hidden="true" />
+              Track learning days
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
 
             {/* Filter Toggle */}
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">

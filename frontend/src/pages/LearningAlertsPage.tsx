@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bell, Check, Mail, MailX } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { describeApiError } from '../services/apiClient'
 import * as learningService from '../services/learning'
@@ -58,7 +59,7 @@ export function LearningAlertsPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">Learning alerts</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Results from your roadmap skill checks and verified learning milestones.
+            Skill-check results and in-app reminders based on your learning calendar.
           </p>
         </div>
         {data && data.unread_count > 0 && (
@@ -138,8 +139,14 @@ export function LearningAlertsPage() {
           <Bell className="mx-auto h-7 w-7 text-slate-400" />
           <h2 className="mt-3 text-sm font-semibold text-slate-900">No learning alerts yet</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Pass or retry a skill check in your roadmap to see progress updates here.
+            Skill-check updates and missed-day reminders will appear here.
           </p>
+          <Link
+            to="/calendar"
+            className="mt-4 inline-flex min-h-10 items-center rounded-lg bg-brand-600 px-4 text-xs font-semibold text-white transition hover:bg-brand-700"
+          >
+            Open learning calendar
+          </Link>
         </div>
       )}
     </div>
