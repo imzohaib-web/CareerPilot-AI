@@ -67,6 +67,11 @@ QWEN_TIMEOUT = float(os.getenv("QWEN_TIMEOUT", "60"))
 # in <think> tags that break JSON parsing.
 QWEN_ENABLE_THINKING = os.getenv("QWEN_ENABLE_THINKING", "false").lower() == "true"
 
+# --- Streaming ---
+STREAMING_ENABLED = os.getenv("STREAMING_ENABLED", "true").lower() == "true"
+STREAMING_IDLE_TIMEOUT = float(os.getenv("STREAMING_IDLE_TIMEOUT", "30"))
+STREAMING_HEARTBEAT_INTERVAL = float(os.getenv("STREAMING_HEARTBEAT_INTERVAL", "15"))
+
 # --- Embeddings (Alibaba Cloud Model Studio / DashScope) ---
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v3")
 EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1024"))

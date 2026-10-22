@@ -5,6 +5,8 @@ this module. Only sanitized errors are raised upward — no keys, stack traces,
 or provider internals escape this service.
 """
 
+import asyncio
+from collections.abc import AsyncGenerator
 import logging
 import time
 from urllib.parse import urlparse
@@ -45,6 +47,73 @@ def _base_url_host() -> str:
         return urlparse(config.QWEN_BASE_URL).hostname or "unknown"
     except ValueError:
         return "unknown"
+
+
+def _map_openai_error(
+    exc: Exception, duration: float, effective_timeout: float
+) -> AIServiceError:
+    """Map provider exceptions to user-safe sanitized AIServiceError instances."""
+    if isinstance(exc, APITimeoutError):
+        logger.error(
+            "Qwen request timed out after %.1fs (limit %.0fs, model=%s)",
+            duration,
+            effective_timeout,
+            config.QWEN_MODEL,
+        )
+        return AIServiceError(f"AI provider request timed out after {effective_timeout:.0f}s")
+    if isinstance(exc, AuthenticationError):
+        logger.error(
+            "Qwen rejected the configured API key (HTTP 401) after %.1fs",
+            duration,
+        )
+        return AIServiceError("AI provider rejected the configured API key (HTTP 401)")
+    if isinstance(exc, NotFoundError):
+        logger.error(
+            "Qwen model/endpoint not found (HTTP 404) after %.1fs (model=%s, base_url_host=%s)",
+            duration,
+            config.QWEN_MODEL,
+            _base_url_host(),
+        )
+        return AIServiceError("AI provider did not recognize the configured model or endpoint (HTTP 404)")
+    if isinstance(exc, BadRequestError):
+        logger.error(
+            "Qwen rejected request parameters (HTTP 400) after %.1fs (model=%s): %.300s",
+            duration,
+            config.QWEN_MODEL,
+            exc,
+        )
+        return AIServiceError("AI provider rejected the request parameters (HTTP 400)")
+    if isinstance(exc, RateLimitError):
+        logger.error("Qwen rate limit reached (HTTP 429) after %.1fs", duration)
+        return AIServiceError("AI provider rate limit reached; please try again shortly")
+    if isinstance(exc, APIConnectionError):
+        logger.error(
+            "Qwen connection failed after %.1fs (base_url_host=%s): %.300s",
+            duration,
+            _base_url_host(),
+            exc,
+        )
+        return AIServiceError("Could not connect to the AI provider")
+    if isinstance(exc, APIStatusError):
+        status_code = getattr(exc, "status_code", "?")
+        logger.error(
+            "Qwen HTTP error %s after %.1fs (model=%s): %.300s",
+            status_code,
+            duration,
+            config.QWEN_MODEL,
+            exc,
+        )
+        return AIServiceError(f"AI provider returned an error (HTTP {status_code})")
+    if isinstance(exc, OpenAIError):
+        logger.error(
+            "Qwen request failed after %.1fs [%s]: %.300s",
+            duration,
+            type(exc).__name__,
+            exc,
+        )
+        return AIServiceError("AI provider request failed")
+    logger.error("Qwen unexpected error after %.1fs: %.300s", duration, exc)
+    return AIServiceError("AI provider request failed")
 
 
 def _get_client() -> AsyncOpenAI:
@@ -93,20 +162,6 @@ async def chat(
 
     Returns ``(reply_text, model)``. Raises ``AIServiceError`` on any
     provider failure.
-
-    Parameters
-    ----------
-    temperature : optional override for the provider default (useful for
-        deterministic structured-output prompts).
-    timeout : per-request timeout in seconds.  Defaults to
-        ``config.QWEN_TIMEOUT`` (60 s).  Callers with large prompts
-        (e.g. resume analysis) should pass a longer value.
-    extra_body : merged into the request body.  Used to control
-        provider-specific options such as Qwen3 thinking mode.
-    history : earlier conversation turns as ``{"role", "content"}`` dicts,
-        replayed between the system prompt and the current user message.
-        Only ``user``/``assistant`` turns with non-empty content are sent;
-        malformed entries are skipped.
     """
     client = _get_client()
     messages: list[dict] = []
@@ -143,91 +198,9 @@ async def chat(
     )
     try:
         completion = await client.chat.completions.create(**kwargs)
-    except APITimeoutError as exc:
+    except Exception as exc:
         duration = time.monotonic() - t0
-        # Log duration + context; never expose keys or request bodies.
-        logger.error(
-            "Qwen request timed out after %.1fs (limit %.0fs, model=%s)",
-            duration,
-            effective_timeout,
-            config.QWEN_MODEL,
-        )
-        raise AIServiceError(
-            f"AI provider request timed out after {effective_timeout:.0f}s"
-        ) from exc
-    except AuthenticationError as exc:
-        duration = time.monotonic() - t0
-        logger.error(
-            "Qwen rejected the configured API key (HTTP 401) after %.1fs",
-            duration,
-        )
-        raise AIServiceError(
-            "AI provider rejected the configured API key (HTTP 401)"
-        ) from exc
-    except NotFoundError as exc:
-        duration = time.monotonic() - t0
-        logger.error(
-            "Qwen model/endpoint not found (HTTP 404) after %.1fs "
-            "(model=%s, base_url_host=%s)",
-            duration,
-            config.QWEN_MODEL,
-            _base_url_host(),
-        )
-        raise AIServiceError(
-            "AI provider did not recognize the configured model or endpoint "
-            "(HTTP 404)"
-        ) from exc
-    except BadRequestError as exc:
-        duration = time.monotonic() - t0
-        # Provider error body can explain the bad parameter — safe to log
-        # server-side (contains no secrets), truncated.
-        logger.error(
-            "Qwen rejected request parameters (HTTP 400) after %.1fs "
-            "(model=%s): %.300s",
-            duration,
-            config.QWEN_MODEL,
-            exc,
-        )
-        raise AIServiceError(
-            "AI provider rejected the request parameters (HTTP 400)"
-        ) from exc
-    except RateLimitError as exc:
-        duration = time.monotonic() - t0
-        logger.error("Qwen rate limit reached (HTTP 429) after %.1fs", duration)
-        raise AIServiceError(
-            "AI provider rate limit reached; please try again shortly"
-        ) from exc
-    except APIConnectionError as exc:
-        duration = time.monotonic() - t0
-        logger.error(
-            "Qwen connection failed after %.1fs (base_url_host=%s): %.300s",
-            duration,
-            _base_url_host(),
-            exc,
-        )
-        raise AIServiceError("Could not connect to the AI provider") from exc
-    except APIStatusError as exc:
-        duration = time.monotonic() - t0
-        status_code = getattr(exc, "status_code", "?")
-        logger.error(
-            "Qwen HTTP error %s after %.1fs (model=%s): %.300s",
-            status_code,
-            duration,
-            config.QWEN_MODEL,
-            exc,
-        )
-        raise AIServiceError(
-            f"AI provider returned an error (HTTP {status_code})"
-        ) from exc
-    except OpenAIError as exc:
-        duration = time.monotonic() - t0
-        logger.error(
-            "Qwen request failed after %.1fs [%s]: %.300s",
-            duration,
-            type(exc).__name__,
-            exc,
-        )
-        raise AIServiceError("AI provider request failed") from exc
+        raise _map_openai_error(exc, duration, effective_timeout) from exc
 
     duration = time.monotonic() - t0
     if not completion.choices:
@@ -243,3 +216,127 @@ async def chat(
         len(content),
     )
     return content, model
+
+
+async def stream_chat_completion(
+    messages: list[dict],
+    temperature: float | None = None,
+    timeout: float | None = None,
+    idle_timeout: float | None = None,
+    extra_body: dict | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream text deltas from Qwen via the OpenAI-compatible client.
+
+    Yields non-empty text deltas only.
+    Enforces overall timeout and idle timeout (no token for idle_timeout seconds).
+    Never logs prompt, token content, or secrets.
+    """
+    client = _get_client()
+    effective_timeout = timeout if timeout is not None else config.QWEN_TIMEOUT
+    effective_idle_timeout = (
+        idle_timeout if idle_timeout is not None else config.STREAMING_IDLE_TIMEOUT
+    )
+
+    body = dict(extra_body) if extra_body else {}
+    body.setdefault("enable_thinking", False)
+
+    kwargs: dict = {
+        "model": config.QWEN_MODEL,
+        "messages": messages,
+        "stream": True,
+        "timeout": effective_timeout,
+        "extra_body": body,
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    t0 = time.monotonic()
+    total_deadline = t0 + effective_timeout
+
+    logger.debug(
+        "Qwen streaming request started (model=%s, messages=%d, timeout=%.0fs, idle_timeout=%.0fs, base_url_host=%s)",
+        config.QWEN_MODEL,
+        len(messages),
+        effective_timeout,
+        effective_idle_timeout,
+        _base_url_host(),
+    )
+
+    try:
+        stream = await client.chat.completions.create(**kwargs)
+    except AIServiceError:
+        raise
+    except OpenAIError as exc:
+        duration = time.monotonic() - t0
+        raise _map_openai_error(exc, duration, effective_timeout) from exc
+    except Exception as exc:
+        duration = time.monotonic() - t0
+        logger.error("Qwen unexpected error creating stream after %.1fs: %.300s", duration, exc)
+        raise AIServiceError("Failed to initiate AI streaming response") from exc
+
+    try:
+        while True:
+            time_left = total_deadline - time.monotonic()
+            if time_left <= 0:
+                duration = time.monotonic() - t0
+                logger.error(
+                    "Qwen stream total timeout reached after %.1fs (limit %.0fs)",
+                    duration,
+                    effective_timeout,
+                )
+                raise AIServiceError(f"AI provider request timed out after {effective_timeout:.0f}s")
+
+            wait_time = min(time_left, effective_idle_timeout)
+            try:
+                # Use stream.__anext__() to pull next chunk with idle timeout
+                chunk = await asyncio.wait_for(stream.__anext__(), timeout=wait_time)
+            except StopAsyncIteration:
+                break
+            except asyncio.TimeoutError as exc:
+                duration = time.monotonic() - t0
+                if time.monotonic() >= total_deadline:
+                    logger.error(
+                        "Qwen stream total timeout reached after %.1fs (limit %.0fs)",
+                        duration,
+                        effective_timeout,
+                    )
+                    raise AIServiceError(f"AI provider request timed out after {effective_timeout:.0f}s") from exc
+                else:
+                    logger.error(
+                        "Qwen stream idle timeout (no token for %.0fs, total elapsed %.1fs)",
+                        effective_idle_timeout,
+                        duration,
+                    )
+                    raise AIServiceError(
+                        f"AI provider stream idle timeout: no token received for {effective_idle_timeout:.0f}s"
+                    ) from exc
+            except OpenAIError as exc:
+                duration = time.monotonic() - t0
+                raise _map_openai_error(exc, duration, effective_timeout) from exc
+            except asyncio.CancelledError:
+                logger.info("Qwen stream cancelled by caller after %.1fs", time.monotonic() - t0)
+                raise
+            except Exception as exc:
+                duration = time.monotonic() - t0
+                logger.error("Qwen stream iteration error after %.1fs: %.300s", duration, exc)
+                raise AIServiceError("AI provider streaming failed") from exc
+
+            choices = getattr(chunk, "choices", None) or []
+            if choices:
+                delta = getattr(choices[0], "delta", None)
+                delta_content = getattr(delta, "content", None) if delta else None
+                if delta_content and isinstance(delta_content, str):
+                    yield delta_content
+
+    finally:
+        try:
+            if hasattr(stream, "close"):
+                res = stream.close()
+                if asyncio.iscoroutine(res):
+                    await res
+            elif hasattr(stream, "aclose"):
+                res = stream.aclose()
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception:
+            pass

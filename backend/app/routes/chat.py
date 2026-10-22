@@ -6,7 +6,9 @@ JWT (never from the request body).  Handlers stay thin — validate → call
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 
+from app import config
 from app.core.rate_limit import limiter, medium_cost_rate_limit, require_medium_cost_quota
 from app.schemas.chat import (
     MentorChatRequest,
@@ -53,6 +55,38 @@ async def send_message(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         )
+
+
+@router.post("/message/stream")
+@limiter.limit(medium_cost_rate_limit)
+async def stream_message(
+    request: Request,
+    body: MentorChatRequest,
+    current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_medium_cost_quota),
+) -> StreamingResponse:
+    """Stream token deltas for the AI Career Mentor as text/event-stream SSE events."""
+    if not config.STREAMING_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Streaming is currently disabled",
+        )
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(
+        chat_service.stream_message(
+            user_id=str(current_user["_id"]),
+            message=body.message,
+            conversation_id=body.conversation_id,
+            request=request,
+        ),
+        media_type="text/event-stream",
+        headers=headers,
+    )
 
 
 @router.get("/history", response_model=MentorHistoryResponse)

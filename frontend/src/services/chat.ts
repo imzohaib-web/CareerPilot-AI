@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient'
+import { streamPost, type StreamHandlers } from './streamClient'
 import type { MentorChatResponse, MentorHistoryResponse } from '../types'
 
 /**
@@ -22,4 +23,24 @@ export async function sendMentorMessage(
 export async function fetchMentorHistory(): Promise<MentorHistoryResponse> {
   const response = await apiClient.get<MentorHistoryResponse>('/api/chat/history')
   return response.data
+}
+
+/**
+ * Stream a message to the AI Career Mentor using SSE.
+ */
+export async function streamMentorMessage(
+  message: string,
+  conversationId: string | null | undefined,
+  handlers: StreamHandlers<MentorChatResponse>,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost<MentorChatResponse>({
+    path: '/api/chat/message/stream',
+    body: {
+      message,
+      conversation_id: conversationId ?? null,
+    },
+    handlers,
+    signal,
+  })
 }

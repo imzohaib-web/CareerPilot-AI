@@ -401,6 +401,8 @@ export interface ChatMessage {
   content: string
   created_at: string
   citations?: CitationRef[]
+  isStreaming?: boolean
+  isStopped?: boolean
 }
 
 export interface MentorChatResponse {

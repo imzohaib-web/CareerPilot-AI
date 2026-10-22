@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Database,
   Search,
@@ -15,6 +15,9 @@ import {
   Sparkles,
   Layers,
   ShieldCheck,
+  Square,
+  ArrowDown,
+  Info,
 } from 'lucide-react'
 
 import { MessageContent } from '../components/chat/MessageContent'
@@ -38,6 +41,8 @@ interface ChatMessage {
   retrievalStatus?: 'grounded' | 'weak' | 'no_context' | string
   modelUsed?: string
   isSearchOnly?: boolean
+  isStreaming?: boolean
+  isStopped?: boolean
   timestamp: string
 }
 
@@ -99,6 +104,27 @@ function safeFormatSimilarity(val?: number | null, decimals = 1): string {
   return `${(clamped * 100).toFixed(decimals)}%`
 }
 
+function sanitizeIncrementalMarkdown(text: string): string {
+  const codeBlockCount = (text.match(/```/g) || []).length
+  if (codeBlockCount % 2 !== 0) {
+    return `${text}\n\`\`\``
+  }
+  return text
+}
+
+function InlineThinkingDots() {
+  return (
+    <div className="flex items-center gap-2 py-0.5" aria-hidden="true">
+      <span className="flex space-x-1">
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none" />
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-bounce motion-reduce:animate-none [animation-delay:0.2s]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-bounce motion-reduce:animate-none [animation-delay:0.4s]" />
+      </span>
+      <span className="text-slate-400 text-xs">Formulating grounded response…</span>
+    </div>
+  )
+}
+
 function RagKnowledgePageInner() {
   const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'query'>('chat')
   const [documents, setDocuments] = useState<DocumentInfo[]>([])
@@ -151,7 +177,110 @@ function RagKnowledgePageInner() {
   ])
   const [inputMessage, setInputMessage] = useState('')
   const [isSendingChat, setIsSendingChat] = useState(false)
+  const [isStreamingChat, setIsStreamingChat] = useState(false)
+  const [chatFallbackNotice, setChatFallbackNotice] = useState<string | null>(null)
   const [activeCitation, setActiveCitation] = useState<CitationRef | null>(null)
+  const [showScrollBottom, setShowScrollBottom] = useState(false)
+
+  const chatAbortControllerRef = useRef<AbortController | null>(null)
+  const chatPendingDeltasRef = useRef<string>('')
+  const chatRafIdRef = useRef<number | null>(null)
+  const chatFallbackCountRef = useRef<number>(0)
+  const isNearBottomRef = useRef<boolean>(true)
+
+  // Track window scroll to determine whether to auto-scroll or display the scroll-to-latest button
+  useEffect(() => {
+    function handleScroll() {
+      const scrollHeight = document.documentElement.scrollHeight
+      const currentScroll = window.innerHeight + window.scrollY
+      const isNear = scrollHeight - currentScroll <= 150
+      isNearBottomRef.current = isNear
+      if (isNear) {
+        setShowScrollBottom(false)
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const scrollToBottomIfNear = useCallback(() => {
+    if (isNearBottomRef.current) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+    } else {
+      setShowScrollBottom(true)
+    }
+  }, [])
+
+  // rAF batching for smooth token rendering without frame drops
+  const flushChatRaf = useCallback(() => {
+    if (chatRafIdRef.current !== null) {
+      cancelAnimationFrame(chatRafIdRef.current)
+      chatRafIdRef.current = null
+    }
+    const chunk = chatPendingDeltasRef.current
+    if (chunk) {
+      chatPendingDeltasRef.current = ''
+      setChatMessages((prev) => {
+        if (prev.length === 0) return prev
+        const next = [...prev]
+        const lastIdx = next.length - 1
+        const last = next[lastIdx]
+        if (last && last.sender === 'ai') {
+          next[lastIdx] = {
+            ...last,
+            text: last.text + chunk,
+          }
+        }
+        return next
+      })
+      scrollToBottomIfNear()
+    }
+  }, [scrollToBottomIfNear])
+
+  const scheduleChatRaf = useCallback(() => {
+    if (chatRafIdRef.current !== null) return
+    chatRafIdRef.current = requestAnimationFrame(() => {
+      chatRafIdRef.current = null
+      flushChatRaf()
+    })
+  }, [flushChatRaf])
+
+  useEffect(() => {
+    return () => {
+      if (chatRafIdRef.current !== null) {
+        cancelAnimationFrame(chatRafIdRef.current)
+      }
+      chatAbortControllerRef.current?.abort()
+    }
+  }, [])
+
+  function handleStopChat() {
+    if (chatAbortControllerRef.current) {
+      chatAbortControllerRef.current.abort()
+      chatAbortControllerRef.current = null
+    }
+    flushChatRaf()
+    setIsStreamingChat(false)
+    setIsSendingChat(false)
+    setChatMessages((prev) => {
+      if (prev.length === 0) return prev
+      const next = [...prev]
+      const lastIdx = next.length - 1
+      const last = next[lastIdx]
+      if (last && last.sender === 'ai') {
+        const text = last.text.trim()
+          ? `${last.text}\n\n*(Generation stopped)*`
+          : '*(Generation stopped)*'
+        next[lastIdx] = {
+          ...last,
+          text,
+          isStreaming: false,
+          isStopped: true,
+        }
+      }
+      return next
+    })
+  }
 
   // ── Independent Load Handlers (Promise.allSettled) ─────────────────────────
   const loadDocuments = useCallback(async () => {
@@ -254,11 +383,47 @@ function RagKnowledgePageInner() {
     }
   }
 
+  const fallbackChatToNonStreaming = useCallback(async (msg: string) => {
+    chatFallbackCountRef.current += 1
+    if (chatFallbackCountRef.current > 1) {
+      setChatFallbackNotice('Streaming is currently unavailable; response loaded via standard mode.')
+    }
+    try {
+      setIsSendingChat(true)
+      const res = await ragService.sendRagChat({ message: msg, top_k: 4 })
+      setChatMessages((prev) => {
+        const next = [...prev]
+        const lastIdx = next.length - 1
+        if (lastIdx >= 0 && next[lastIdx]?.sender === 'ai') {
+          next[lastIdx] = {
+            id: (Date.now() + 1).toString(),
+            sender: 'ai',
+            text: res.answer || res.reply || 'No answer generated.',
+            sources: res.sources || [],
+            citations: res.citations || [],
+            retrievalStatus: res.retrieval_status || 'grounded',
+            modelUsed: res.model_used,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isStreaming: false,
+          }
+        }
+        return next
+      })
+    } catch (err) {
+      setChatMessages((prev) => prev.slice(0, -2))
+      setInputMessage(msg)
+      setGlobalError(describeApiError(err).message)
+    } finally {
+      setIsSendingChat(false)
+      setIsStreamingChat(false)
+    }
+  }, [])
+
   // ── Handle RAG Chat / Search-Only ─────────────────────────────────────────
   async function handleSendChat(e: React.FormEvent) {
     e.preventDefault()
     const msg = inputMessage.trim()
-    if (!msg || isSendingChat) return
+    if (!msg || isSendingChat || isStreamingChat) return
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -269,10 +434,10 @@ function RagKnowledgePageInner() {
 
     setChatMessages((prev) => [...prev, userMsg])
     setInputMessage('')
-    setIsSendingChat(true)
     setGlobalError(null)
 
     if (searchOnlyMode) {
+      setIsSendingChat(true)
       // Search-Only Mode: retrieves and shows fused ranks without LLM generation
       try {
         const res = await ragService.queryKnowledgeBase({ query: msg, top_k: 5 })
@@ -296,24 +461,117 @@ function RagKnowledgePageInner() {
       return
     }
 
-    // Grounded Chat Mode: calls /api/rag/chat
+    // Grounded Chat Mode: calls /api/rag/chat/stream
+    const aiPlaceholder: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      sender: 'ai',
+      text: '',
+      sources: [],
+      citations: [],
+      retrievalStatus: 'grounded',
+      isStreaming: true,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }
+    setChatMessages((prev) => [...prev, aiPlaceholder])
+    setIsSendingChat(true)
+    setIsStreamingChat(true)
+
+    const abortController = new AbortController()
+    chatAbortControllerRef.current = abortController
+    let hasReceivedToken = false
+
     try {
-      const res = await ragService.sendRagChat({ message: msg, top_k: 4 })
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: res.answer || res.reply || 'No answer generated.',
-        sources: res.sources || [],
-        citations: res.citations || [],
-        retrievalStatus: res.retrieval_status || 'grounded',
-        modelUsed: res.model_used,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }
-      setChatMessages((prev) => [...prev, aiMsg])
-    } catch (err) {
-      setGlobalError(describeApiError(err).message)
-    } finally {
+      await ragService.streamRagChat(
+        { message: msg, top_k: 4 },
+        {
+          onSources: (data) => {
+            const retrievedChunks = (data.sources as ChunkSource[]) || []
+            const retStatus = data.retrieval_status || 'grounded'
+            setChatMessages((prev) => {
+              const next = [...prev]
+              const lastIdx = next.length - 1
+              if (lastIdx >= 0 && next[lastIdx]?.sender === 'ai') {
+                next[lastIdx] = {
+                  ...next[lastIdx],
+                  sources: retrievedChunks,
+                  retrievalStatus: retStatus,
+                }
+              }
+              return next
+            })
+          },
+          onDelta: (delta) => {
+            hasReceivedToken = true
+            chatPendingDeltasRef.current += delta
+            scheduleChatRaf()
+          },
+          onDone: (res) => {
+            flushChatRaf()
+            setIsStreamingChat(false)
+            setIsSendingChat(false)
+            chatAbortControllerRef.current = null
+            setChatMessages((prev) => {
+              const next = [...prev]
+              const lastIdx = next.length - 1
+              if (lastIdx >= 0 && next[lastIdx]?.sender === 'ai') {
+                next[lastIdx] = {
+                  ...next[lastIdx],
+                  text: res.answer || res.reply || 'No answer generated.',
+                  sources: res.sources || [],
+                  citations: res.citations || [],
+                  retrievalStatus: res.retrieval_status || 'grounded',
+                  modelUsed: res.model_used,
+                  isStreaming: false,
+                }
+              }
+              return next
+            })
+          },
+          onError: (err) => {
+            flushChatRaf()
+            setIsStreamingChat(false)
+            setIsSendingChat(false)
+            chatAbortControllerRef.current = null
+
+            if (err.category === 'aborted') {
+              return
+            }
+
+            if (!hasReceivedToken) {
+              void fallbackChatToNonStreaming(msg)
+            } else {
+              setGlobalError(err.message)
+              setChatMessages((prev) => {
+                const next = [...prev]
+                const lastIdx = next.length - 1
+                if (lastIdx >= 0 && next[lastIdx]?.sender === 'ai') {
+                  next[lastIdx] = {
+                    ...next[lastIdx],
+                    isStreaming: false,
+                  }
+                }
+                return next
+              })
+            }
+          },
+        },
+        abortController.signal
+      )
+    } catch (err: unknown) {
+      flushChatRaf()
+      setIsStreamingChat(false)
       setIsSendingChat(false)
+      chatAbortControllerRef.current = null
+
+      if (abortController.signal.aborted) {
+        return
+      }
+
+      if (!hasReceivedToken) {
+        void fallbackChatToNonStreaming(msg)
+      } else {
+        setGlobalError(describeApiError(err).message)
+      }
     }
   }
 
@@ -575,27 +833,63 @@ function RagKnowledgePageInner() {
                     {/* Content Display */}
                     {isUser ? (
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                    ) : isNoContext ? (
-                      <div className="rounded-lg bg-slate-50 border border-slate-200 p-3.5 space-y-3">
-                        <div className="flex items-start gap-2.5">
-                          <AlertCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                          <div className="space-y-1">
-                            <p className="font-semibold text-slate-900">No Knowledge Base Coverage</p>
-                            <p className="text-slate-600 leading-relaxed text-[11px]">{msg.text}</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab('documents')}
-                          className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <UploadCloud className="h-3.5 w-3.5" />
-                          <span>Upload a Document to Knowledge Base</span>
-                        </button>
-                      </div>
                     ) : (
-                      <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900">
-                        <MessageContent content={msg.text} />
+                      <div
+                        aria-live="polite"
+                        aria-busy={msg.isStreaming ? 'true' : 'false'}
+                        className="space-y-2"
+                      >
+                        {msg.isStreaming && !msg.text ? (
+                          <InlineThinkingDots />
+                        ) : isNoContext ? (
+                          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3.5 space-y-3">
+                            <div className="flex items-start gap-2.5">
+                              <AlertCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                              <div className="space-y-1">
+                                <p className="font-semibold text-slate-900">No Knowledge Base Coverage</p>
+                                <p className="text-slate-600 leading-relaxed text-[11px]">{msg.text}</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('documents')}
+                              className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <UploadCloud className="h-3.5 w-3.5" />
+                              <span>Upload a Document to Knowledge Base</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="leading-relaxed prose prose-xs max-w-none text-slate-800 prose-headings:text-slate-900">
+                            <MessageContent content={sanitizeIncrementalMarkdown(msg.text)} />
+                          </div>
+                        )}
+
+                        {msg.isStopped && (
+                          <p className="text-[11px] italic text-slate-400">
+                            Generation stopped by user
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Early retrieved sources while streaming (before citations arrive) */}
+                    {!isUser && msg.isStreaming && msg.sources && msg.sources.length > 0 && (!msg.citations || msg.citations.length === 0) && (
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                            Retrieving from:
+                          </span>
+                          {msg.sources.map((s, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium bg-slate-100 border border-slate-200 text-slate-700"
+                            >
+                              <Layers className="h-3 w-3 text-slate-500" />
+                              <span className="truncate max-w-[140px]">{s.document_title || 'Knowledge Doc'}</span>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -693,7 +987,7 @@ function RagKnowledgePageInner() {
               )
             })}
 
-            {isSendingChat && (
+            {isSendingChat && !isStreamingChat && (
               <div className="flex gap-2 items-center text-xs text-slate-500">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-600" />
                 <span>Searching vector store & applying hybrid ranking…</span>
@@ -703,6 +997,21 @@ function RagKnowledgePageInner() {
 
           {/* Floating Composer */}
           <div className="sticky bottom-0 z-10 bg-slate-50/95 pt-2 pb-4">
+            {chatFallbackNotice && (
+              <div className="rounded-lg bg-slate-100 border border-slate-200 px-3 py-1.5 text-[11px] text-slate-600 flex items-center justify-between mb-2">
+                <span className="flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                  {chatFallbackNotice}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChatFallbackNotice(null)}
+                  className="text-slate-400 hover:text-slate-600 ml-2 font-medium cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <form
               onSubmit={handleSendChat}
               className="clean-card p-1.5 flex items-center gap-2 focus-within:border-slate-400 shadow-sm"
@@ -710,24 +1019,50 @@ function RagKnowledgePageInner() {
               <input
                 type="text"
                 value={inputMessage}
+                disabled={isSendingChat || isStreamingChat}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder={
                   searchOnlyMode
                     ? 'Search knowledge base chunks directly (e.g. FastAPI routing, STAR method)...'
+                    : isStreamingChat
+                    ? 'Generating response…'
                     : 'Ask any question grounded in knowledge base documents...'
                 }
-                className="flex-1 border-0 px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                className="flex-1 border-0 px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:bg-transparent disabled:text-slate-400"
               />
-              <button
-                type="submit"
-                disabled={isSendingChat || !inputMessage.trim()}
-                className="btn-primary text-xs py-1.5 px-3.5 shrink-0 cursor-pointer"
-              >
-                <span>{searchOnlyMode ? 'Search' : 'Ask'}</span>
-                {searchOnlyMode ? <Search className="h-3 w-3" /> : <Send className="h-3 w-3" />}
-              </button>
+              {isStreamingChat ? (
+                <button
+                  type="button"
+                  onClick={handleStopChat}
+                  className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold py-1.5 px-3 inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                  <span>Stop</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSendingChat || !inputMessage.trim()}
+                  className="btn-primary text-xs py-1.5 px-3.5 shrink-0 cursor-pointer"
+                >
+                  <span>{searchOnlyMode ? 'Search' : 'Ask'}</span>
+                  {searchOnlyMode ? <Search className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+                </button>
+              )}
             </form>
           </div>
+
+          {/* Scroll to latest button */}
+          {showScrollBottom && (
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })}
+              className="fixed bottom-20 right-6 z-20 flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1.5 text-xs shadow-lg hover:bg-slate-800 transition animate-fade-in cursor-pointer"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+              <span>Scroll to latest</span>
+            </button>
+          )}
         </div>
       )}
 

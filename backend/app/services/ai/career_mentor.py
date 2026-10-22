@@ -14,11 +14,16 @@ Output trust policy (per AI_ARCHITECTURE.md):
   Generated → validated (non-empty, no internal leakage) → returned.
 """
 
+from collections.abc import AsyncGenerator
 import logging
 
 from app import config
 from app.schemas.resume import ResumeAnalysis
-from app.services.ai.qwen_service import AIServiceError, chat as qwen_chat
+from app.services.ai.qwen_service import (
+    AIServiceError,
+    chat as qwen_chat,
+    stream_chat_completion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +127,90 @@ async def ask_mentor(
 
     logger.info("Qwen mentor reply generated (model=%s, chars=%d)", model, len(reply))
     return reply, model
+
+
+def _build_mentor_messages(
+    user_message: str,
+    profile: dict | None,
+    resume: ResumeAnalysis | None,
+    history: list[dict[str, str]],
+    sources: list | None = None,
+) -> list[dict]:
+    """Assemble the system prompt, validated history turns, and user message."""
+    system_prompt = _build_system_prompt(profile, resume, sources=sources)
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    for turn in history or []:
+        if not isinstance(turn, dict):
+            continue
+        role = turn.get("role")
+        content = turn.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": user_message})
+    return messages
+
+
+async def stream_mentor(
+    user_message: str,
+    profile: dict | None,
+    resume: ResumeAnalysis | None,
+    history: list[dict[str, str]],
+    sources: list | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream a grounded mentor reply as validated text deltas.
+
+    Guards against leaking internal tags or context markers even when
+    split across token chunks. Raises AIServiceError on provider failures
+    or validation errors.
+    """
+    messages = _build_mentor_messages(user_message, profile, resume, history, sources=sources)
+
+    logger.info(
+        "Starting Qwen mentor streaming turn (history_turns=%d, message_chars=%d, sources=%d)",
+        len(history),
+        len(user_message),
+        len(sources or []),
+    )
+
+    forbidden_markers = [_CONTEXT_MARKER, "<source", "</source>", "<think>", "</think>"]
+    max_marker_len = max(len(m) for m in forbidden_markers)
+    buffer = ""
+    accumulated_len = 0
+
+    async for delta in stream_chat_completion(
+        messages=messages,
+        temperature=_MENTOR_TEMPERATURE,
+        extra_body={"enable_thinking": config.QWEN_ENABLE_THINKING},
+    ):
+        buffer += delta
+        for marker in forbidden_markers:
+            if marker in buffer:
+                logger.warning(
+                    "Mentor streaming reply contained forbidden marker %s; rejecting",
+                    marker,
+                )
+                raise AIServiceError("AI response failed validation")
+
+        if len(buffer) > max_marker_len:
+            safe_to_emit = buffer[:-max_marker_len]
+            buffer = buffer[-max_marker_len:]
+            accumulated_len += len(safe_to_emit)
+            yield safe_to_emit
+
+    for marker in forbidden_markers:
+        if marker in buffer:
+            logger.warning(
+                "Mentor streaming reply contained forbidden marker %s in tail; rejecting",
+                marker,
+            )
+            raise AIServiceError("AI response failed validation")
+
+    accumulated_len += len(buffer)
+    if accumulated_len == 0 or not buffer.strip():
+        raise AIServiceError("AI mentor returned an empty response")
+
+    if buffer:
+        yield buffer
 
 
 # ── Prompt construction ───────────────────────────────────────────────────

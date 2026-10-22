@@ -6,12 +6,17 @@ heading-aware semantic text chunking, and grounded AI chat.
 Includes full in-memory offline fallback for resilient operation without MongoDB.
 """
 
+import asyncio
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
+import json
 import logging
 import math
 import re
 from typing import Any
 import uuid
+
+from fastapi import Request
 
 from app import config
 from app.database.mongodb import get_db
@@ -1463,6 +1468,193 @@ async def grounded_chat(
         retrieval_status=status,
         used_general_knowledge=bool(allow_general_knowledge),
     )
+
+
+async def stream_grounded_chat(
+    user_id: str,
+    message: str,
+    top_k: int = 5,
+    document_ids: list[str] | None = None,
+    allow_general_knowledge: bool = False,
+    db=None,
+    request: Request | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream RAG grounded response with SSE protocol.
+
+    Events:
+      - {"type": "start", "conversation_id": ""}
+      - If no_context: single delta with refusal message, then done event with empty citations.
+      - If context exists:
+        - {"type": "sources", "sources": [...], "retrieval_status": status}
+        - {"type": "delta", "text": "..."} (streamed tokens with rolling safety buffer)
+        - {"type": "done", ...final payload}
+      - Heartbeat ": ping" every 15s before first token.
+      - Terminal error event on failure.
+    """
+    yield f"data: {json.dumps({'type': 'start', 'conversation_id': ''})}\n\n"
+
+    try:
+        sources = await retrieve_context(
+            user_id=user_id,
+            query=message,
+            top_k=top_k,
+            document_ids=document_ids,
+            db=db,
+        )
+    except Exception as exc:
+        logger.error("RAG retrieval failed for stream: %s", exc)
+        yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to retrieve context documents', 'code': 'RETRIEVAL_ERROR'})}\n\n"
+        return
+
+    status = getattr(sources, "status", "grounded")
+
+    # Refusal path: if status is no_context or sources is empty, do NOT call LLM
+    if status == "no_context" or not sources:
+        refusal_msg = (
+            "I could not find any relevant information in your knowledge base to answer this question. "
+            "Try uploading a relevant career document or job description, or rephrasing your search."
+        )
+        yield f"data: {json.dumps({'type': 'delta', 'text': refusal_msg})}\n\n"
+        done_payload = {
+            "type": "done",
+            "reply": refusal_msg,
+            "answer": refusal_msg,
+            "sources": [],
+            "citations": [],
+            "model_used": "retrieval-guard",
+            "status": "no_context",
+            "retrieval_status": "no_context",
+            "used_general_knowledge": False,
+        }
+        yield f"data: {json.dumps(done_payload)}\n\n"
+        return
+
+    # Early sources event right after retrieval so UI can show sources immediately
+    serialized_sources = [
+        s.model_dump() if hasattr(s, "model_dump") else (s if isinstance(s, dict) else s.__dict__)
+        for s in sources
+    ]
+    yield f"data: {json.dumps({'type': 'sources', 'sources': serialized_sources, 'retrieval_status': status})}\n\n"
+
+    context_str = format_delimited_sources(sources, max_words=3000)
+    system_prompt = RAG_SYSTEM_PROMPT.format(context_text=context_str)
+
+    if status == "weak":
+        system_prompt += (
+            "\nIMPORTANT NOTICE: Knowledge base relevance for this query is weak. "
+            "Answer cautiously and explicitly inform the user that the knowledge base has limited coverage on this topic.\n"
+        )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": message},
+    ]
+
+    forbidden_markers = ["<source", "</source>", "<think>", "</think>", "USER CONTEXT"]
+    max_marker_len = max(len(m) for m in forbidden_markers)
+    buffer = ""
+    accumulated_deltas: list[str] = []
+
+    try:
+        stream_gen = qwen_service.stream_chat_completion(
+            messages=messages,
+            temperature=0.25,
+            extra_body={"enable_thinking": False},
+        )
+
+        token_task = asyncio.create_task(stream_gen.__anext__())
+        has_first_token = False
+        first_delta = None
+
+        while not has_first_token:
+            if request and await request.is_disconnected():
+                token_task.cancel()
+                logger.info("Client disconnected before first token received in RAG stream")
+                return
+
+            done, _ = await asyncio.wait(
+                [token_task], timeout=config.STREAMING_HEARTBEAT_INTERVAL
+            )
+            if done:
+                has_first_token = True
+                try:
+                    first_delta = token_task.result()
+                except StopAsyncIteration:
+                    first_delta = None
+            else:
+                yield ": ping\n\n"
+
+        def _drain_safe(raw_chunk: str) -> list[str]:
+            nonlocal buffer
+            buffer += raw_chunk
+            for marker in forbidden_markers:
+                if marker in buffer:
+                    logger.warning("RAG streaming reply contained forbidden marker %s; aborting", marker)
+                    raise qwen_service.AIServiceError("AI response failed validation")
+
+            out = []
+            if len(buffer) > max_marker_len:
+                to_emit = buffer[:-max_marker_len]
+                buffer = buffer[-max_marker_len:]
+                accumulated_deltas.append(to_emit)
+                out.append(to_emit)
+            return out
+
+        if first_delta:
+            for chunk in _drain_safe(first_delta):
+                yield f"data: {json.dumps({'type': 'delta', 'text': chunk})}\n\n"
+
+        async for delta in stream_gen:
+            if request and await request.is_disconnected():
+                logger.info("Client disconnected during RAG stream; aborting")
+                return
+            for chunk in _drain_safe(delta):
+                yield f"data: {json.dumps({'type': 'delta', 'text': chunk})}\n\n"
+
+        for marker in forbidden_markers:
+            if marker in buffer:
+                logger.warning("RAG streaming reply contained forbidden marker %s in tail; aborting", marker)
+                raise qwen_service.AIServiceError("AI response failed validation")
+
+        if buffer:
+            accumulated_deltas.append(buffer)
+            yield f"data: {json.dumps({'type': 'delta', 'text': buffer})}\n\n"
+            buffer = ""
+
+    except AIConfigurationError as exc:
+        logger.error("AI configuration error in RAG stream: %s", exc)
+        yield f"data: {json.dumps({'type': 'error', 'message': str(exc), 'code': 'AI_NOT_CONFIGURED'})}\n\n"
+        return
+    except qwen_service.AIServiceError as exc:
+        logger.error("AI service error in RAG stream: %s", exc)
+        yield f"data: {json.dumps({'type': 'error', 'message': str(exc), 'code': 'AI_PROVIDER_ERROR'})}\n\n"
+        return
+    except asyncio.CancelledError:
+        logger.info("RAG stream cancelled; exiting cleanly")
+        return
+    except Exception as exc:
+        logger.exception("Unexpected error during RAG stream: %s", exc)
+        yield f"data: {json.dumps({'type': 'error', 'message': 'An unexpected error occurred during streaming', 'code': 'STREAMING_ERROR'})}\n\n"
+        return
+
+    full_reply = "".join(accumulated_deltas)
+    cleaned_reply, citations = parse_and_validate_citations(full_reply, sources)
+
+    done_payload = {
+        "type": "done",
+        "reply": cleaned_reply,
+        "answer": cleaned_reply,
+        "sources": serialized_sources,
+        "citations": [
+            c.model_dump() if hasattr(c, "model_dump") else c
+            for c in citations
+        ],
+        "model_used": config.QWEN_MODEL,
+        "status": status,
+        "retrieval_status": status,
+        "used_general_knowledge": bool(allow_general_knowledge),
+    }
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
 
 # ── Cross-Module Grounded Retrieval Helpers ─────────────────────────────────

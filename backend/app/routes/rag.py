@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app import config
@@ -149,6 +150,41 @@ async def grounded_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate grounded RAG response",
         ) from exc
+
+
+@router.post("/chat/stream")
+@limiter.limit(medium_cost_rate_limit)
+async def stream_grounded_chat(
+    request: Request,
+    payload: RAGChatRequest,
+    current_user: dict = Depends(get_current_user),
+    _: None = Depends(require_medium_cost_quota),
+) -> StreamingResponse:
+    """Stream token deltas for RAG grounded advisor chat as text/event-stream SSE events."""
+    if not config.STREAMING_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Streaming is currently disabled",
+        )
+
+    user_id = str(current_user["_id"])
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(
+        rag_service.stream_grounded_chat(
+            user_id=user_id,
+            message=payload.message,
+            top_k=payload.top_k,
+            document_ids=payload.document_ids,
+            allow_general_knowledge=payload.allow_general_knowledge,
+            request=request,
+        ),
+        media_type="text/event-stream",
+        headers=headers,
+    )
 
 
 def _get_optional_db() -> AsyncIOMotorDatabase | None:

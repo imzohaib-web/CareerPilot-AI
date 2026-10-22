@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient'
+import { streamPost, type StreamHandlers } from './streamClient'
 import type {
   ChunkSource,
   CitationRef,
@@ -222,4 +223,26 @@ export async function sendRagChat(
 ): Promise<RAGChatResponse> {
   const { data } = await apiClient.post<unknown>('/api/rag/chat', payload)
   return normalizeRAGChatResponse(data)
+}
+
+/**
+ * Stream a question to the RAG-grounded AI advisor using SSE.
+ */
+export async function streamRagChat(
+  payload: RAGChatRequest,
+  handlers: StreamHandlers<RAGChatResponse>,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost<RAGChatResponse>({
+    path: '/api/rag/chat/stream',
+    body: payload,
+    handlers: {
+      ...handlers,
+      onDone: (rawDone) => {
+        const normalized = normalizeRAGChatResponse(rawDone)
+        handlers.onDone?.(normalized)
+      },
+    },
+    signal,
+  })
 }
