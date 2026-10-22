@@ -581,12 +581,18 @@ async def seed_knowledge_background(
     knowledge_dir: Path | str | None = None,
     force: bool = False,
     offline: bool = False,
+    use_hash_fallback: bool = True,
 ) -> None:
     """Non-blocking background wrapper invoked during FastAPI startup."""
     try:
         mode_label = "in-memory store" if offline else "MongoDB"
         logger.info("Initiating non-blocking background knowledge base seed into %s...", mode_label)
-        res = await seed_knowledge(knowledge_dir=knowledge_dir, force=force, offline=offline)
+        res = await seed_knowledge(
+            knowledge_dir=knowledge_dir,
+            force=force,
+            offline=offline,
+            use_hash_fallback=use_hash_fallback,
+        )
         logger.info(
             "Knowledge base background seed finished successfully (%s): seeded=%s, skipped=%s, total_docs=%s",
             mode_label,

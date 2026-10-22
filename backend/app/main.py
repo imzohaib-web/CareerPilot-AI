@@ -25,6 +25,39 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+async def _startup_background_tasks() -> None:
+    """Non-blocking background initialization tasks to ensure instant HTTP server readiness."""
+    try:
+        connected = False
+        try:
+            connected = await asyncio.wait_for(connect_db(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.warning("MongoDB initial connection attempt timed out; running in offline mode")
+        except Exception as exc:
+            logger.warning("MongoDB background connection failed (%s); running in offline mode", exc)
+
+        if not connected:
+            logger.warning("Running in memory mode: using local seed data")
+            asyncio.create_task(seed_knowledge_background(offline=True, use_hash_fallback=True))
+        else:
+            # Non-blocking startup seeding without external LLM or embedding API calls
+            asyncio.create_task(seed_knowledge_background(use_hash_fallback=True))
+
+        # Create rate limiting and abuse prevention indexes in background
+        try:
+            db = get_db()
+            if hasattr(db, "usage_counters"):
+                await db.usage_counters.create_index("created_at", expireAfterSeconds=259200)
+                await db.usage_counters.create_index([("user_id", 1), ("date", 1)], unique=True)
+            if hasattr(db, "login_attempts"):
+                await db.login_attempts.create_index("created_at", expireAfterSeconds=1800)
+                await db.login_attempts.create_index("email", unique=True)
+        except Exception as exc:
+            logger.debug("Rate limit indexes skipped or pending connection: %s", exc)
+    except Exception as exc:
+        logger.warning("Unexpected error during startup background tasks: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Origins are public URLs (no secrets) — logging them makes CORS
@@ -34,25 +67,8 @@ async def lifespan(app: FastAPI):
         "CORS allowed origins: %s",
         ", ".join(config.CORS_ORIGINS) if config.CORS_ORIGINS else "(none configured)",
     )
-    connected = await connect_db()
-    if not connected:
-        logger.warning("Running in memory mode: using local seed data")
-        asyncio.create_task(seed_knowledge_background(offline=True))
-    else:
-        # Non-blocking startup seeding of curated knowledge base (background task)
-        asyncio.create_task(seed_knowledge_background())
-
-    # Create rate limiting and abuse prevention indexes
-    try:
-        db = get_db()
-        if hasattr(db, "usage_counters"):
-            await db.usage_counters.create_index("created_at", expireAfterSeconds=259200)
-            await db.usage_counters.create_index([("user_id", 1), ("date", 1)], unique=True)
-        if hasattr(db, "login_attempts"):
-            await db.login_attempts.create_index("created_at", expireAfterSeconds=1800)
-            await db.login_attempts.create_index("email", unique=True)
-    except Exception as exc:
-        logger.debug("Rate limit indexes skipped or pending connection: %s", exc)
+    # Move database connection, indexing, and knowledge seeding to non-blocking background task
+    asyncio.create_task(_startup_background_tasks())
 
     yield
     await close_db()
@@ -91,6 +107,12 @@ app.include_router(interview.router)
 app.include_router(rag.router)
 app.include_router(progress.router)
 app.include_router(chat.router)
+
+
+@app.get("/api/health/ping")
+async def health_ping() -> dict[str, bool]:
+    """Lightweight ping endpoint for cold start wakeup. Zero database or external calls."""
+    return {"ok": True}
 
 
 @app.get("/api/health")

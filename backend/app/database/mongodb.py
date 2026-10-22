@@ -313,9 +313,9 @@ async def _ensure_indexes() -> None:
             _classify_error(exc),
         )
 
-    # Idempotent Atlas Vector Search index creation (createSearchIndexes)
+    # Idempotent Atlas Vector Search index creation (createSearchIndexes) with timeout
     try:
-        await _ensure_vector_search_index(db)
+        await asyncio.wait_for(_ensure_vector_search_index(db), timeout=5.0)
     except Exception as exc:
         logger.warning(
             "Could not ensure Atlas Vector Search index (%s); in-memory fallback active",
