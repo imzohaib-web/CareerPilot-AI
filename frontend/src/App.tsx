@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { AppLayout } from './layouts/AppLayout'
@@ -16,31 +17,103 @@ import { SkillGapPage } from './pages/SkillGapPage'
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<ProgressDashboardPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/resume" element={<ResumeAnalyzerPage />} />
-            <Route path="/skill-gap" element={<SkillGapPage />} />
-            <Route path="/roadmap" element={<RoadmapPage />} />
-            <Route path="/mentor" element={<CareerMentorPage />} />
-            <Route path="/interview" element={<MockInterviewPage />} />
-            <Route path="/rag" element={<RagKnowledgePage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <ErrorBoundary fallbackTitle="Application Error" fallbackMessage="CareerPilot AI encountered an unexpected error.">
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                <ErrorBoundary fallbackTitle="Login Error">
+                  <LoginPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <ErrorBoundary fallbackTitle="Registration Error">
+                  <RegisterPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                path="/"
+                element={
+                  <ErrorBoundary fallbackTitle="Dashboard Error">
+                    <ProgressDashboardPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ErrorBoundary fallbackTitle="Profile Error">
+                    <ProfilePage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/resume"
+                element={
+                  <ErrorBoundary fallbackTitle="Resume Analyzer Error">
+                    <ResumeAnalyzerPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/skill-gap"
+                element={
+                  <ErrorBoundary fallbackTitle="Skill Gap Error">
+                    <SkillGapPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/roadmap"
+                element={
+                  <ErrorBoundary fallbackTitle="Roadmap Error">
+                    <RoadmapPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/mentor"
+                element={
+                  <ErrorBoundary fallbackTitle="Career Mentor Error">
+                    <CareerMentorPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/interview"
+                element={
+                  <ErrorBoundary fallbackTitle="Mock Interview Error">
+                    <MockInterviewPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/rag"
+                element={
+                  <ErrorBoundary fallbackTitle="Knowledge Base Error" fallbackMessage="An error occurred while displaying the RAG Knowledge Base.">
+                    <RagKnowledgePage />
+                  </ErrorBoundary>
+                }
+              />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
