@@ -1,734 +1,1472 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
-  User,
-  FileText,
-  Map,
-  Video,
-  Target,
-  CheckCircle2,
+  Check,
   CircleAlert,
-  TrendingUp,
+  Clock,
+  ExternalLink,
+  FileText,
+  HelpCircle,
+  Map,
   RefreshCw,
-  MessageSquare,
-  ChevronRight,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Video,
 } from 'lucide-react'
 
 import { useAuth } from '../context/AuthContext'
 import { describeApiError } from '../services/apiClient'
 import * as progressService from '../services/progress'
-import type { DashboardResponse } from '../types'
+import * as roadmapService from '../services/roadmap'
+import * as skillGapService from '../services/skillGap'
+import * as interviewService from '../services/interview'
+import type {
+  DashboardResponse,
+  RoadmapResponse,
+  SkillGapResponse,
+  InterviewResponse,
+  RoadmapTask,
+} from '../types'
+import {
+  firstName,
+  getTimeAwareGreeting,
+  getProgressTier,
+} from '../utils/formatters'
+import { calculateReadiness } from '../utils/readinessFormula'
+import {
+  MOCK_FULL_DATA,
+  MOCK_PARTIAL_DATA,
+  MOCK_NEW_USER_DATA,
+} from '../utils/dashboardMockData'
+import { Badge, type BadgeVariant } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { ProgressRing } from '../components/ui/ProgressRing'
+import { ProgressBar } from '../components/ui/ProgressBar'
+import { Tooltip } from '../components/ui/Tooltip'
+import { Drawer } from '../components/ui/Modal'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Skeleton } from '../components/ui/Skeleton'
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Custom Count-Up Hook ──────────────────────────────────────────────────
 
-function scoreBadgeClass(score: number): string {
-  if (score >= 75) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (score >= 50) return 'bg-amber-50 text-amber-700 border-amber-200'
-  return 'bg-rose-50 text-rose-700 border-rose-200'
+function useCountUp(target: number, durationMs: number = 800): number {
+  const [count, setCount] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return target
+    }
+    return 0
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return
+    }
+
+    let startTimestamp: number | null = null
+    let rafId: number
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp
+      const elapsed = timestamp - startTimestamp
+      const progress = Math.min(elapsed / durationMs, 1)
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setCount(Math.round(eased * target))
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(step)
+      }
+    }
+
+    rafId = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafId)
+  }, [target, durationMs])
+
+  return count
 }
 
-function scoreTextColor(score: number): string {
-  if (score >= 75) return 'text-emerald-700'
-  if (score >= 50) return 'text-amber-700'
-  return 'text-rose-700'
+// ── Pace Calculation Helper ───────────────────────────────────────────────
+
+interface WeekPace {
+  status: 'on_track' | 'ahead' | 'behind'
+  label: string
+  badgeVariant: BadgeVariant
 }
 
-function progressBarColor(score: number): string {
-  if (score >= 75) return 'bg-emerald-500'
-  if (score >= 50) return 'bg-amber-500'
-  return 'bg-rose-500'
-}
-
-function experienceLabel(level: string): string {
-  const map: Record<string, string> = {
-    student: 'Student',
-    'fresh-graduate': 'Fresh Graduate',
-    'early-career': 'Early Career',
+function computePace(completedCount: number, totalCount: number): WeekPace {
+  if (totalCount === 0) {
+    return { status: 'on_track', label: 'On Track', badgeVariant: 'brand' }
   }
-  return map[level] ?? level
+  const ratio = completedCount / totalCount
+  if (ratio >= 0.6) {
+    return { status: 'ahead', label: 'Ahead of Pace', badgeVariant: 'success' }
+  }
+  if (ratio >= 0.25) {
+    return { status: 'on_track', label: 'On Track', badgeVariant: 'brand' }
+  }
+  return { status: 'behind', label: 'Behind Schedule', badgeVariant: 'warning' }
 }
 
-// ── Main Dashboard Page ──────────────────────────────────────────────────
+// ── Main Dashboard Component ──────────────────────────────────────────────
 
 export function ProgressDashboardPage() {
   const { user } = useAuth()
-  const [data, setData] = useState<DashboardResponse | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true)
+  // State
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
+  const [roadmap, setRoadmap] = useState<RoadmapResponse | null>(null)
+  const [skillGap, setSkillGap] = useState<SkillGapResponse | null>(null)
+  const [interview, setInterview] = useState<InterviewResponse | null>(null)
+
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  const demoMode = searchParams.get('demo') // 'full' | 'partial' | 'new-user' | 'error' | null
+
+  // Optimistic toggling tracker
+  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
+
+  // Fetch all dashboard data concurrently with graceful partial failure
+  const loadDashboardData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true)
+    } else {
+      setIsLoading(true)
+    }
     setError(null)
+
     try {
-      const result = await progressService.fetchDashboard()
-      setData(result)
+      const [dashRes, roadRes, gapRes, intRes] = await Promise.allSettled([
+        progressService.fetchDashboard(),
+        roadmapService.fetchLatestRoadmap(),
+        skillGapService.fetchLatestSkillGap(),
+        interviewService.fetchLatestInterview(),
+      ])
+
+      if (dashRes.status === 'fulfilled') {
+        setDashboard(dashRes.value)
+      } else {
+        throw dashRes.reason
+      }
+
+      if (roadRes.status === 'fulfilled') {
+        setRoadmap(roadRes.value)
+      } else {
+        setRoadmap(null)
+      }
+
+      if (gapRes.status === 'fulfilled') {
+        setSkillGap(gapRes.value)
+      } else {
+        setSkillGap(null)
+      }
+
+      if (intRes.status === 'fulfilled') {
+        setInterview(intRes.value)
+      } else {
+        setInterview(null)
+      }
     } catch (err) {
       setError(describeApiError(err).message)
     } finally {
       setIsLoading(false)
+      setIsRefreshing(false)
     }
   }, [])
 
+  const applyMockState = useCallback((type: 'full' | 'partial' | 'new-user' | 'error' | 'live') => {
+    if (type === 'error') {
+      setError('Unable to load dashboard: Simulated API connection failure (500).')
+      setDashboard(null)
+      return
+    }
+    if (type === 'full') {
+      setError(null)
+      setDashboard(MOCK_FULL_DATA.dashboard)
+      setRoadmap(MOCK_FULL_DATA.roadmap)
+      setSkillGap(MOCK_FULL_DATA.skillGap)
+      setInterview(MOCK_FULL_DATA.interview)
+      return
+    }
+    if (type === 'partial') {
+      setError(null)
+      setDashboard(MOCK_PARTIAL_DATA.dashboard)
+      setRoadmap(MOCK_PARTIAL_DATA.roadmap)
+      setSkillGap(MOCK_PARTIAL_DATA.skillGap)
+      setInterview(MOCK_PARTIAL_DATA.interview)
+      return
+    }
+    if (type === 'new-user') {
+      setError(null)
+      setDashboard(MOCK_NEW_USER_DATA.dashboard)
+      setRoadmap(MOCK_NEW_USER_DATA.roadmap)
+      setSkillGap(MOCK_NEW_USER_DATA.skillGap)
+      setInterview(MOCK_NEW_USER_DATA.interview)
+      return
+    }
+    loadDashboardData()
+  }, [loadDashboardData])
+
   useEffect(() => {
-    loadDashboard()
-  }, [loadDashboard])
+    if (demoMode === 'full') {
+      applyMockState('full')
+      setIsLoading(false)
+    } else if (demoMode === 'partial') {
+      applyMockState('partial')
+      setIsLoading(false)
+    } else if (demoMode === 'new-user') {
+      applyMockState('new-user')
+      setIsLoading(false)
+    } else if (demoMode === 'error') {
+      applyMockState('error')
+      setIsLoading(false)
+    } else {
+      loadDashboardData()
+    }
+  }, [demoMode, applyMockState, loadDashboardData])
 
-  // Deduplicated skills from profile + resume
-  const allSkills = useMemo(() => {
-    if (!data) return []
-    const profileSkills = data.profile.skills ?? []
-    const resumeSkills = data.resume.skills_detected ?? []
-    const seen = new Set<string>()
-    const result: { name: string; source: 'profile' | 'resume' }[] = []
+  // ── 1. Greeting & Profile Details ────────────────────────────────────────
+  const greeting = useMemo(() => getTimeAwareGreeting(), [])
+  const userFirstName = useMemo(() => firstName(user?.name), [user?.name])
+  const targetRole = useMemo(() => {
+    return dashboard?.profile.target_role || roadmap?.target_role || ''
+  }, [dashboard?.profile.target_role, roadmap?.target_role])
 
-    for (const s of profileSkills) {
-      const key = s.toLowerCase()
-      if (!seen.has(key)) {
-        seen.add(key)
-        result.push({ name: s, source: 'profile' })
+  // ── 2. Weighted Readiness Calculation ────────────────────────────────────
+  const readiness = useMemo(() => {
+    if (!dashboard) {
+      return {
+        score: 0,
+        isProvisional: true,
+        missingModules: ['Profile', 'Resume ATS', 'Roadmap', 'Mock Interview'],
+        provisionalReason: 'Loading progress metrics...',
+        breakdown: {
+          profile: { score: 0, weight: 0.15, contribution: 0, isCompleted: false, label: 'Career Profile' },
+          resume: { score: 0, weight: 0.3, contribution: 0, isCompleted: false, label: 'Resume ATS' },
+          roadmap: { score: 0, weight: 0.3, contribution: 0, isCompleted: false, label: 'Roadmap Tasks' },
+          interview: { score: 0, weight: 0.25, contribution: 0, isCompleted: false, label: 'Mock Interview' },
+        },
       }
     }
-    for (const s of resumeSkills) {
-      const key = s.toLowerCase()
-      if (!seen.has(key)) {
-        seen.add(key)
-        result.push({ name: s, source: 'resume' })
+
+    return calculateReadiness({
+      profile: {
+        has_profile: dashboard.profile.has_profile,
+        completeness: dashboard.profile.completeness,
+      },
+      resume: {
+        has_analysis: dashboard.resume.has_analysis,
+        score: dashboard.resume.score,
+      },
+      roadmap: dashboard.roadmap
+        ? {
+            has_roadmap: dashboard.roadmap.has_roadmap,
+            completion_percentage: dashboard.roadmap.completion_percentage,
+          }
+        : null,
+      interview: dashboard.interview
+        ? {
+            has_interview: dashboard.interview.has_interview,
+            latest_score: dashboard.interview.latest_score,
+          }
+        : null,
+    })
+  }, [dashboard])
+
+  const animatedScore = useCountUp(readiness.score, 800)
+
+  // ── 3. Next Best Action (Single Primary Hero CTA) ────────────────────────
+  const heroAction = useMemo(() => {
+    if (dashboard?.next_steps && dashboard.next_steps.length > 0) {
+      const top = dashboard.next_steps[0]
+      // Derive why it matters and estimated time
+      let why = 'Complete this key step to advance your career readiness score.'
+      let time = '10 min'
+
+      if (top.action.includes('profile')) {
+        why = 'Establish your target role and core skills so our AI can tailor recommendations.'
+        time = '5 min'
+      } else if (top.action.includes('resume')) {
+        why = 'Uncover keyword gaps and ATS benchmark issues before applying to target roles.'
+        time = '3 min'
+      } else if (top.action.includes('gap') || top.action.includes('skill')) {
+        why = 'Identify essential technical competencies employers expect for this role.'
+        time = '5 min'
+      } else if (top.action.includes('roadmap')) {
+        why = 'Follow structured weekly milestones designed to bridge missing qualifications.'
+        time = '15 min'
+      } else if (top.action.includes('interview')) {
+        why = 'Validate your interview pacing and technical depth with live AI evaluation.'
+        time = '15 min'
+      } else if (top.action.includes('mentor')) {
+        why = 'Get strategic coaching on interview strategies and career transitions.'
+        time = '10 min'
+      }
+
+      return {
+        label: top.label,
+        action: top.action,
+        priority: top.priority,
+        why,
+        time,
       }
     }
-    return result
-  }, [data])
 
-  // Determine top next action
-  const topAction = useMemo(() => {
-    if (!data) return { to: '/profile', label: 'Complete profile' }
-    if (!data.profile.has_profile) return { to: '/profile', label: 'Create Career Profile' }
-    if (!data.resume.has_analysis) return { to: '/resume', label: 'Analyze Resume' }
-    if (!data.roadmap?.has_roadmap) return { to: '/roadmap', label: 'Generate Roadmap' }
-    if (!data.interview?.has_interview) return { to: '/interview', label: 'Start Mock Interview' }
-    return { to: '/mentor', label: 'Consult Career Mentor' }
-  }, [data])
+    // Fallback if no next_steps returned
+    if (!dashboard?.profile.has_profile) {
+      return {
+        label: 'Create Career Profile',
+        action: '/profile',
+        priority: 'high' as const,
+        why: 'Define your target role and background so AI modules provide tailored guidance.',
+        time: '5 min',
+      }
+    }
+    if (!dashboard?.resume.has_analysis) {
+      return {
+        label: 'Analyze Your Resume',
+        action: '/resume',
+        priority: 'high' as const,
+        why: 'Get an instant ATS score and detect critical missing skills for your dream role.',
+        time: '3 min',
+      }
+    }
+    if (!roadmap?.roadmap) {
+      return {
+        label: 'Generate Learning Roadmap',
+        action: '/roadmap',
+        priority: 'high' as const,
+        why: 'Follow structured weekly milestones designed to bridge missing qualifications.',
+        time: '5 min',
+      }
+    }
+    if (!dashboard?.interview?.has_interview) {
+      return {
+        label: 'Practice Mock Interview',
+        action: '/interview',
+        priority: 'medium' as const,
+        why: 'Validate your interview pacing and technical depth with live AI evaluation.',
+        time: '15 min',
+      }
+    }
 
-  // ── Loading Skeleton ───────────────────────────────────────────────────
+    return {
+      label: 'Consult AI Career Mentor',
+      action: '/mentor',
+      priority: 'low' as const,
+      why: 'Engage with our career advisor to refine your negotiation and portfolio strategy.',
+      time: '10 min',
+    }
+  }, [dashboard, roadmap])
+
+  // ── 4. Journey Stepper (Slim 6 Nodes) ────────────────────────────────────
+  const journeySteps = useMemo(() => {
+    if (!dashboard) return []
+
+    const hasProfile = dashboard.profile.has_profile && dashboard.profile.completeness >= 80
+    const hasResume = dashboard.resume.has_analysis
+    const hasSkillGap = Boolean(skillGap?.analysis || (dashboard.resume.has_analysis && dashboard.resume.skills_count > 0))
+    const hasRoadmap = Boolean(roadmap?.roadmap && (dashboard.roadmap?.completion_percentage ?? 0) > 0)
+    const hasMentor = Boolean(dashboard.profile.has_profile)
+    const hasInterview = Boolean(dashboard.interview?.has_interview)
+
+    const rawSteps = [
+      { id: 1, label: 'Profile', to: '/profile', completed: hasProfile },
+      { id: 2, label: 'Resume', to: '/resume', completed: hasResume },
+      { id: 3, label: 'Skill Gap', to: '/skill-gap', completed: hasSkillGap },
+      { id: 4, label: 'Roadmap', to: '/roadmap', completed: hasRoadmap },
+      { id: 5, label: 'AI Mentor', to: '/mentor', completed: hasMentor },
+      { id: 6, label: 'Interview', to: '/interview', completed: hasInterview },
+    ]
+
+    let foundCurrent = false
+    return rawSteps.map((s) => {
+      if (s.completed) {
+        return { ...s, status: 'completed' as const }
+      }
+      if (!foundCurrent) {
+        foundCurrent = true
+        return { ...s, status: 'current' as const }
+      }
+      return { ...s, status: 'upcoming' as const }
+    })
+  }, [dashboard, roadmap, skillGap])
+
+  const completedStepsCount = useMemo(() => {
+    return journeySteps.filter((s) => s.status === 'completed').length
+  }, [journeySteps])
+
+  // ── 5. This Week Panel (Roadmap) ─────────────────────────────────────────
+  const activePhase = useMemo(() => {
+    if (!roadmap?.roadmap?.phases?.length) return null
+    return (
+      roadmap.roadmap.phases.find((phase) =>
+        phase.tasks.some((t) => !roadmap.completed_tasks.includes(t.id))
+      ) || roadmap.roadmap.phases[0]
+    )
+  }, [roadmap])
+
+  const thisWeekTasks = useMemo(() => {
+    if (!activePhase) return []
+    return activePhase.tasks.slice(0, 4)
+  }, [activePhase])
+
+  const weekCompletedCount = useMemo(() => {
+    if (!roadmap || !thisWeekTasks.length) return 0
+    return thisWeekTasks.filter((t) => roadmap.completed_tasks.includes(t.id)).length
+  }, [roadmap, thisWeekTasks])
+
+  const weekProgressPercent = useMemo(() => {
+    if (!thisWeekTasks.length) return 0
+    return Math.round((weekCompletedCount / thisWeekTasks.length) * 100)
+  }, [weekCompletedCount, thisWeekTasks.length])
+
+  const weekPace = useMemo(() => {
+    return computePace(weekCompletedCount, thisWeekTasks.length)
+  }, [weekCompletedCount, thisWeekTasks.length])
+
+  // Optimistic task toggling
+  const handleToggleTask = async (task: RoadmapTask) => {
+    if (!roadmap || togglingTaskId) return
+
+    const isCompleted = roadmap.completed_tasks.includes(task.id)
+    const newCompleted = !isCompleted
+
+    setTogglingTaskId(task.id)
+
+    // Optimistic UI state update
+    setRoadmap((prev) => {
+      if (!prev) return prev
+      const newCompletedTasks = newCompleted
+        ? [...prev.completed_tasks, task.id]
+        : prev.completed_tasks.filter((id) => id !== task.id)
+      return { ...prev, completed_tasks: newCompletedTasks }
+    })
+
+    try {
+      const updated = await roadmapService.toggleRoadmapTask(roadmap.id, task.id, newCompleted)
+      setRoadmap(updated)
+      // Re-fetch dashboard silently in background to update overall progress
+      progressService.fetchDashboard().then(setDashboard).catch(() => {})
+    } catch {
+      // Rollback on failure
+      setRoadmap((prev) => {
+        if (!prev) return prev
+        const reverted = isCompleted
+          ? [...prev.completed_tasks, task.id]
+          : prev.completed_tasks.filter((id) => id !== task.id)
+        return { ...prev, completed_tasks: reverted }
+      })
+    } finally {
+      setTogglingTaskId(null)
+    }
+  }
+
+  // ── 6. Skills Snapshot (Top 5 Missing Skills) ─────────────────────────────
+  const topMissingSkills = useMemo(() => {
+    if (!skillGap?.analysis) return []
+    const tech = (skillGap.analysis.missing_technical_skills || []).map((name) => ({
+      name,
+      importance: 'High Priority' as const,
+      variant: 'brand' as const,
+    }))
+    const soft = (skillGap.analysis.missing_soft_skills || []).map((name) => ({
+      name,
+      importance: 'Soft Skill' as const,
+      variant: 'neutral' as const,
+    }))
+    return [...tech, ...soft].slice(0, 5)
+  }, [skillGap])
+
+  // ── 7. Resume Summary Improvements ───────────────────────────────────────
+  const resumeImprovements = useMemo(() => {
+    if (!dashboard?.resume?.improvements) return []
+    return dashboard.resume.improvements.slice(0, 2)
+  }, [dashboard])
+
+  // ── 8. Recent Activity (Omitted if no real activity exists) ──────────────
+  const recentActivities = useMemo(() => {
+    const list: Array<{
+      id: string
+      title: string
+      detail: string
+      date: string
+      icon: typeof FileText
+      to: string
+    }> = []
+
+    if (dashboard?.resume?.has_analysis && dashboard.resume.analyzed_at) {
+      list.push({
+        id: 'resume-act',
+        title: 'Resume Analyzed',
+        detail: `ATS score ${dashboard.resume.score}/100 with ${dashboard.resume.skills_count} detected skills.`,
+        date: new Date(dashboard.resume.analyzed_at).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        }),
+        icon: FileText,
+        to: '/resume',
+      })
+    }
+
+    if (interview && (interview.completed_at || interview.created_at)) {
+      const dt = interview.completed_at || interview.created_at
+      list.push({
+        id: 'interview-act',
+        title: 'Mock Interview Finished',
+        detail: `Scored ${dashboard?.interview?.latest_score ?? 0}/100 on ${interview.target_role || 'role'} simulation.`,
+        date: new Date(dt).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        }),
+        icon: Video,
+        to: '/interview',
+      })
+    }
+
+    if (roadmap?.created_at) {
+      list.push({
+        id: 'roadmap-act',
+        title: 'Roadmap Generated',
+        detail: `${roadmap.target_role || 'Career'} curriculum with ${roadmap.completed_tasks.length} tasks completed.`,
+        date: new Date(roadmap.created_at).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        }),
+        icon: Map,
+        to: '/roadmap',
+      })
+    }
+
+    return list.slice(0, 3)
+  }, [dashboard, interview, roadmap])
+
+  // ── Loading Skeleton (Matches Final Layout) ──────────────────────────────
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <div className="h-20 rounded-xl bg-slate-200/60 animate-pulse" />
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2 h-44 rounded-xl bg-slate-200/60 animate-pulse" />
-          <div className="h-44 rounded-xl bg-slate-200/60 animate-pulse" />
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-5 space-y-4">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
+            <Skeleton variant="text" width={220} height={28} />
+            <Skeleton variant="text" width={140} height={18} />
+          </div>
+          <Skeleton variant="rectangular" width={88} height={32} />
         </div>
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
-          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
-          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
-          <div className="h-40 rounded-xl bg-slate-200/60 animate-pulse" />
+
+        {/* Hero & Readiness Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-7">
+            <Skeleton variant="card" className="h-[188px]" />
+          </div>
+          <div className="lg:col-span-5">
+            <Skeleton variant="card" className="h-[188px]" />
+          </div>
+        </div>
+
+        {/* Stepper Skeleton */}
+        <Skeleton variant="rectangular" className="h-12 w-full rounded-xl" />
+
+        {/* 3-Column Bottom Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-5">
+            <Skeleton variant="card" className="h-[250px]" />
+          </div>
+          <div className="lg:col-span-4">
+            <Skeleton variant="card" className="h-[250px]" />
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <Skeleton variant="card" className="h-[250px]" />
+          </div>
         </div>
       </div>
     )
   }
 
-  // ── Error State ────────────────────────────────────────────────────────
-  if (error) {
+  // ── Error State (Graceful Retry) ─────────────────────────────────────────
+  if (error || !dashboard) {
     return (
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
-        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-6 text-center max-w-md mx-auto">
-          <CircleAlert className="mx-auto h-8 w-8 text-rose-500 mb-2" />
-          <h2 className="text-sm font-semibold text-slate-900">Failed to load Dashboard</h2>
-          <p className="mt-1 text-xs text-rose-700">{error}</p>
-          <button
-            type="button"
-            onClick={loadDashboard}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs hover:bg-rose-50 transition"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Try again
-          </button>
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-8 text-center max-w-md mx-auto shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-100 text-rose-700 mb-3">
+            <CircleAlert className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">Unable to load dashboard</h2>
+          <p className="mt-1 text-xs text-rose-800 leading-relaxed">
+            {error || 'An unexpected error occurred while communicating with CareerPilot services.'}
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => loadDashboardData(false)}
+              className="bg-white border-rose-200 text-rose-900 hover:bg-rose-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Try again
+            </Button>
+          </div>
+
+          {import.meta.env.DEV && (
+            <div className="mt-5 pt-4 border-t border-rose-200">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-950 block mb-2">
+                Dev Mode: Preview Mock Scenarios
+              </span>
+              <div className="flex items-center justify-center flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ demo: 'full' })
+                    applyMockState('full')
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                >
+                  Full Data
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ demo: 'partial' })
+                    applyMockState('partial')
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                >
+                  Partial Data
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchParams({ demo: 'new-user' })
+                    applyMockState('new-user')
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                >
+                  New User
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
-  if (!data) return null
-
-  const { profile, resume, roadmap, interview, overall_progress, readiness_score, next_steps } = data
+  // Semantic tier for score coloring
+  const scoreTier = getProgressTier(readiness.score)
+  const tierColorClass =
+    scoreTier === 'success'
+      ? 'text-emerald-700'
+      : scoreTier === 'warning'
+      ? 'text-amber-700'
+      : 'text-rose-700'
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* ── 1. Header Overview ────────────────────────────────────────── */}
-      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            Welcome back, {user?.name ?? 'Candidate'}
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+      {/* ── 1. Greeting Header (No explanatory paragraph, Target role pill) ── */}
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-1">
+        <div className="flex items-center flex-wrap gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            {greeting}, {userFirstName}
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {profile.target_role ? (
-              <>Target role: <span className="font-semibold text-slate-800">{profile.target_role}</span>. Here is your current readiness overview and recommended next steps.</>
-            ) : (
-              'Complete your profile and upload your resume to generate your custom career roadmap.'
-            )}
-          </p>
+          {targetRole ? (
+            <Badge variant="brand" size="sm" dot>
+              {targetRole}
+            </Badge>
+          ) : (
+            <Badge variant="neutral" size="sm">
+              Role not set
+            </Badge>
+          )}
         </div>
 
-        <Link
-          to={topAction.to}
-          className="btn-primary self-start sm:self-auto text-xs py-2 px-3.5"
-        >
-          <span>{topAction.label}</span>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      </section>
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {import.meta.env.DEV && (
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/70 p-0.5 text-[11px] font-semibold text-slate-600">
+              <span className="px-1.5 text-slate-400">Mock:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchParams({ demo: 'full' })
+                  applyMockState('full')
+                }}
+                className={`rounded px-1.5 py-0.5 transition ${
+                  demoMode === 'full' ? 'bg-white text-slate-900 shadow-2xs' : 'hover:text-slate-900'
+                }`}
+              >
+                Full
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchParams({ demo: 'partial' })
+                  applyMockState('partial')
+                }}
+                className={`rounded px-1.5 py-0.5 transition ${
+                  demoMode === 'partial' ? 'bg-white text-slate-900 shadow-2xs' : 'hover:text-slate-900'
+                }`}
+              >
+                Partial
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchParams({ demo: 'new-user' })
+                  applyMockState('new-user')
+                }}
+                className={`rounded px-1.5 py-0.5 transition ${
+                  demoMode === 'new-user' ? 'bg-white text-slate-900 shadow-2xs' : 'hover:text-slate-900'
+                }`}
+              >
+                New
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchParams({ demo: 'error' })
+                  applyMockState('error')
+                }}
+                className={`rounded px-1.5 py-0.5 transition ${
+                  demoMode === 'error' ? 'bg-rose-100 text-rose-900 shadow-2xs' : 'hover:text-rose-900'
+                }`}
+              >
+                Error
+              </button>
+            </div>
+          )}
 
-      {/* ── 2. Career Readiness Summary ─────────────────────────────────── */}
-      <section className="grid gap-5 lg:grid-cols-3">
-        {/* Main Readiness Gauge */}
-        <div className="lg:col-span-2 clean-card p-5 sm:p-6">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => loadDashboardData(true)}
+            disabled={isRefreshing}
+            aria-label="Refresh dashboard data"
+            className="text-xs text-slate-600 hover:text-slate-900 h-8 px-2.5"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 mr-1.5 text-slate-500 ${isRefreshing ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </div>
+      </header>
+
+      {/* ── 2 & 3. Hero CTA & Readiness Hub Grid (Above fold 1440x900) ─────── */}
+      <section
+        aria-label="Overview and Next Action"
+        className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch"
+      >
+        {/* ── 2. HERO: Next Best Action Card (Single primary CTA) ────────── */}
+        <Card
+          variant="default"
+          className="lg:col-span-7 flex flex-col justify-between p-5 border-brand-200/80 bg-gradient-to-br from-white via-brand-50/20 to-white shadow-card"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">
+                <Sparkles className="h-3.5 w-3.5 text-brand-600" aria-hidden="true" />
+                Next Best Action
+              </span>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                  <Clock className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                  ~{heroAction.time}
+                </span>
+                <Badge
+                  variant={
+                    heroAction.priority === 'high'
+                      ? 'danger'
+                      : heroAction.priority === 'medium'
+                      ? 'warning'
+                      : 'info'
+                  }
+                  size="sm"
+                >
+                  {heroAction.priority} priority
+                </Badge>
+              </div>
+            </div>
+
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              {heroAction.label}
+            </h2>
+            <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl">
+              {heroAction.why}
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <Link
+              to={heroAction.action}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 active:scale-[0.99] transition"
+            >
+              <span>Start Now</span>
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+
+            {dashboard.next_steps.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(true)}
+                className="text-xs font-semibold text-brand-700 hover:text-brand-900 underline-offset-4 hover:underline transition py-1 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+              >
+                See all steps ({dashboard.next_steps.length})
+              </button>
+            )}
+          </div>
+        </Card>
+
+        {/* ── 3. READINESS HUB: ProgressRing + Breakdown Legend ──────────── */}
+        <Card
+          variant="default"
+          className="lg:col-span-5 flex flex-col justify-between p-5 shadow-card"
+        >
+          <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-slate-700" />
-                <h2 className="text-sm font-semibold text-slate-900">Career Readiness Score</h2>
+                <TrendingUp className="h-4 w-4 text-slate-700" aria-hidden="true" />
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+                  Career Readiness
+                </h2>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Weighted calculation across profile depth, ATS resume match, and interview performance.
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Multi-factor score based on 4 pillars.
               </p>
             </div>
-            <div className="text-right">
-              <span className="text-3xl font-bold text-slate-900">{overall_progress}%</span>
-              <span className="block text-[10px] uppercase font-medium text-slate-400">Overall</span>
-            </div>
+
+            {readiness.isProvisional ? (
+              <Tooltip content={readiness.provisionalReason} position="left">
+                <span
+                  tabIndex={0}
+                  className="inline-flex items-center gap-1 cursor-help rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200"
+                  aria-label={`Provisional score: ${readiness.provisionalReason}`}
+                >
+                  <HelpCircle className="h-3 w-3 text-amber-600" aria-hidden="true" />
+                  Provisional
+                </span>
+              </Tooltip>
+            ) : (
+              <Badge variant="success" size="sm" dot>
+                Verified
+              </Badge>
+            )}
           </div>
 
-          <div className="mt-4 space-y-4">
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs font-medium text-slate-600">
-                <span>Progress toward job readiness</span>
-                <span>{overall_progress}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${progressBarColor(
-                    overall_progress
-                  )}`}
-                  style={{ width: `${Math.max(overall_progress, 4)}%` }}
-                />
+          {/* Ring + Breakdown */}
+          <div className="mt-3 flex items-center gap-5">
+            <div className="shrink-0 flex flex-col items-center">
+              <ProgressRing
+                value={animatedScore}
+                size={88}
+                strokeWidth={8}
+                variant="automatic"
+                showValue={false}
+                aria-label={`Career readiness score: ${readiness.score} percent, ${scoreTier} tier`}
+              />
+              <div className="mt-[-60px] mb-[22px] flex flex-col items-center pointer-events-none">
+                <span className={`text-xl font-extrabold tabular-nums tracking-tight ${tierColorClass}`}>
+                  {animatedScore}%
+                </span>
+                <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">
+                  Readiness
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 pt-2">
-              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
-                <span className="text-[11px] font-medium text-slate-500">Profile</span>
-                <p className="text-base font-bold text-slate-900 mt-0.5">{profile.completeness}%</p>
-                <span className="text-[10px] text-slate-400">
-                  {profile.has_profile ? 'Configured' : 'Incomplete'}
+            {/* Breakdown Legend (Replaces old duplicate cards) */}
+            <div className="flex-1 space-y-1.5 text-xs">
+              {/* Profile */}
+              <Link
+                to="/profile"
+                className="group flex items-center justify-between rounded-md p-1 hover:bg-slate-50 transition"
+                aria-label={`Profile: ${readiness.breakdown.profile.score}%, contributes 15% weight`}
+              >
+                <div className="flex items-center gap-1.5 w-24">
+                  <span className="text-[11px] font-medium text-slate-700 group-hover:text-brand-700 transition">
+                    Profile
+                  </span>
+                  <span className="text-[10px] text-slate-400">15%</span>
+                </div>
+                <div className="flex-1 mx-2">
+                  <ProgressBar
+                    value={readiness.breakdown.profile.score}
+                    size="sm"
+                    variant={readiness.breakdown.profile.isCompleted ? 'success' : 'warning'}
+                    aria-hidden="true"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-slate-700 group-hover:text-slate-900 w-8 text-right">
+                  {readiness.breakdown.profile.score}%
                 </span>
-              </div>
+              </Link>
 
-              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
-                <span className="text-[11px] font-medium text-slate-500">Resume ATS</span>
-                <p className={`text-base font-bold mt-0.5 ${resume.has_analysis ? scoreTextColor(resume.score) : 'text-slate-400'}`}>
-                  {resume.has_analysis ? `${resume.score}/100` : '—'}
-                </p>
-                <span className="text-[10px] text-slate-400">
-                  {resume.has_analysis ? 'Analyzed' : 'Pending'}
+              {/* Resume ATS */}
+              <Link
+                to="/resume"
+                className="group flex items-center justify-between rounded-md p-1 hover:bg-slate-50 transition"
+                aria-label={`Resume ATS: ${dashboard.resume.has_analysis ? `${dashboard.resume.score}%` : 'Pending'}, contributes 30% weight`}
+              >
+                <div className="flex items-center gap-1.5 w-24">
+                  <span className="text-[11px] font-medium text-slate-700 group-hover:text-brand-700 transition">
+                    Resume ATS
+                  </span>
+                  <span className="text-[10px] text-slate-400">30%</span>
+                </div>
+                <div className="flex-1 mx-2">
+                  <ProgressBar
+                    value={readiness.breakdown.resume.score}
+                    size="sm"
+                    variant={dashboard.resume.has_analysis ? 'automatic' : 'danger'}
+                    aria-hidden="true"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-slate-700 group-hover:text-slate-900 w-8 text-right">
+                  {dashboard.resume.has_analysis ? `${dashboard.resume.score}%` : '—'}
                 </span>
-              </div>
+              </Link>
 
-              <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
-                <span className="text-[11px] font-medium text-slate-500">Interview</span>
-                <p className={`text-base font-bold mt-0.5 ${interview?.has_interview ? scoreTextColor(interview.latest_score) : 'text-slate-400'}`}>
-                  {interview?.has_interview ? `${interview.latest_score}/100` : '—'}
-                </p>
-                <span className="text-[10px] text-slate-400">
-                  {interview?.has_interview ? `${interview.total_interviews} runs` : 'Not tested'}
+              {/* Roadmap */}
+              <Link
+                to="/roadmap"
+                className="group flex items-center justify-between rounded-md p-1 hover:bg-slate-50 transition"
+                aria-label={`Roadmap: ${dashboard.roadmap?.has_roadmap ? `${dashboard.roadmap.completion_percentage}%` : '0%'}, contributes 30% weight`}
+              >
+                <div className="flex items-center gap-1.5 w-24">
+                  <span className="text-[11px] font-medium text-slate-700 group-hover:text-brand-700 transition">
+                    Roadmap
+                  </span>
+                  <span className="text-[10px] text-slate-400">30%</span>
+                </div>
+                <div className="flex-1 mx-2">
+                  <ProgressBar
+                    value={readiness.breakdown.roadmap.score}
+                    size="sm"
+                    variant={dashboard.roadmap?.has_roadmap ? 'automatic' : 'danger'}
+                    aria-hidden="true"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-slate-700 group-hover:text-slate-900 w-8 text-right">
+                  {dashboard.roadmap?.has_roadmap ? `${dashboard.roadmap.completion_percentage}%` : '—'}
                 </span>
-              </div>
+              </Link>
+
+              {/* Mock Interview */}
+              <Link
+                to="/interview"
+                className="group flex items-center justify-between rounded-md p-1 hover:bg-slate-50 transition"
+                aria-label={`Mock Interview: ${dashboard.interview?.has_interview ? `${dashboard.interview.latest_score}%` : 'Untested'}, contributes 25% weight`}
+              >
+                <div className="flex items-center gap-1.5 w-24">
+                  <span className="text-[11px] font-medium text-slate-700 group-hover:text-brand-700 transition">
+                    Interview
+                  </span>
+                  <span className="text-[10px] text-slate-400">25%</span>
+                </div>
+                <div className="flex-1 mx-2">
+                  <ProgressBar
+                    value={readiness.breakdown.interview.score}
+                    size="sm"
+                    variant={dashboard.interview?.has_interview ? 'automatic' : 'danger'}
+                    aria-hidden="true"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold tabular-nums text-slate-700 group-hover:text-slate-900 w-8 text-right">
+                  {dashboard.interview?.has_interview ? `${dashboard.interview.latest_score}%` : '—'}
+                </span>
+              </Link>
             </div>
           </div>
+        </Card>
+      </section>
+
+      {/* ── 4. JOURNEY STEPPER (Slim Horizontal 6-Node Stepper) ───────────── */}
+      <section
+        aria-label="Career Journey Progression"
+        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-card"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-slate-900">Career Preparation Flow</span>
+          <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+            {completedStepsCount} of 6 completed
+          </span>
         </div>
 
-        {/* ATS Resume Snapshot */}
-        <div className="clean-card p-5 sm:p-6 flex flex-col justify-between">
+        <nav aria-label="Progress Stepper" className="overflow-x-auto no-scrollbar">
+          <ol className="flex items-center justify-between min-w-[560px] gap-2">
+            {journeySteps.map((step, idx) => {
+              const isCompleted = step.status === 'completed'
+              const isCurrent = step.status === 'current'
+
+              return (
+                <li key={step.id} className="flex-1 flex items-center">
+                  <Link
+                    to={step.to}
+                    className="flex items-center gap-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded p-1"
+                    aria-current={isCurrent ? 'step' : undefined}
+                  >
+                    {/* Node Icon/Number */}
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                        isCompleted
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : isCurrent
+                          ? 'bg-brand-600 text-white ring-2 ring-brand-200 ring-offset-1'
+                          : 'bg-slate-100 text-slate-500 border border-slate-200 group-hover:bg-slate-200'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <Check className="h-3.5 w-3.5 stroke-[2.5]" aria-hidden="true" />
+                      ) : (
+                        step.id
+                      )}
+                    </span>
+
+                    {/* Step Title */}
+                    <span
+                      className={`text-xs font-medium whitespace-nowrap transition ${
+                        isCompleted
+                          ? 'text-slate-800'
+                          : isCurrent
+                          ? 'font-bold text-brand-700'
+                          : 'text-slate-500 group-hover:text-slate-700'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </Link>
+
+                  {/* Connecting Line between nodes */}
+                  {idx < journeySteps.length - 1 && (
+                    <div
+                      className={`h-0.5 flex-1 mx-2 transition-colors ${
+                        isCompleted ? 'bg-emerald-400' : 'bg-slate-200'
+                      }`}
+                      aria-hidden="true"
+                    />
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+      </section>
+
+      {/* ── 5, 6 & 7. 3-Column Content Row (Equal Height, No Empty Gap) ────── */}
+      <section
+        aria-label="Actionable Modules"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-stretch"
+      >
+        {/* ── 5. "This Week" Panel (Roadmap Tasks with Optimistic Toggle) ── */}
+        <Card
+          variant="default"
+          className="lg:col-span-5 flex flex-col justify-between p-4 shadow-card"
+        >
           <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Resume ATS Status
-              </span>
-              {resume.has_analysis && (
-                <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border ${scoreBadgeClass(resume.score)}`}>
-                  {resume.score >= 75 ? 'Job-Ready' : resume.score >= 50 ? 'Moderate' : 'Needs Polish'}
-                </span>
-              )}
+            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Map className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+                  This Week's Focus
+                </h3>
+              </div>
+              <Badge variant={weekPace.badgeVariant} size="sm">
+                {weekPace.label}
+              </Badge>
             </div>
 
-            {resume.has_analysis ? (
-              <div className="mt-3 flex items-center gap-3">
-                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border font-bold text-lg ${scoreBadgeClass(resume.score)}`}>
-                  {readiness_score}
+            {roadmap?.roadmap ? (
+              <div className="mt-3 space-y-3">
+                {/* Week Title & Progress */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-800 truncate max-w-[200px]">
+                      {activePhase?.name || 'Week Milestones'}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-500">
+                      {weekCompletedCount} of {thisWeekTasks.length} tasks
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={weekProgressPercent}
+                    size="sm"
+                    variant={weekProgressPercent >= 70 ? 'success' : 'brand'}
+                    aria-label={`Weekly progress: ${weekProgressPercent} percent`}
+                  />
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-900">
-                    {resume.score >= 75 ? 'Strong Match' : 'Optimization Recommended'}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {resume.skills_count} skills · {resume.improvements_count} improvements
-                  </p>
+
+                {/* Task List with Optimistic Checkbox */}
+                <div className="space-y-2 pt-1">
+                  {thisWeekTasks.map((task) => {
+                    const isDone = roadmap.completed_tasks.includes(task.id)
+                    const isToggling = togglingTaskId === task.id
+
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => handleToggleTask(task)}
+                        className={`flex items-start gap-2.5 rounded-lg border p-2 cursor-pointer transition ${
+                          isDone
+                            ? 'bg-slate-50 border-slate-200 opacity-80'
+                            : 'bg-white border-slate-200/90 hover:border-brand-300 hover:bg-brand-50/20'
+                        } ${isToggling ? 'opacity-50 pointer-events-none' : ''}`}
+                        role="checkbox"
+                        aria-checked={isDone}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === ' ' || e.key === 'Enter') {
+                            e.preventDefault()
+                            handleToggleTask(task)
+                          }
+                        }}
+                      >
+                        <div
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                            isDone
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isDone && <Check className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-xs font-medium leading-snug line-clamp-1 ${
+                              isDone ? 'text-slate-400 line-through' : 'text-slate-800'
+                            }`}
+                          >
+                            {task.title}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                            <span>{task.skill || 'Skill Target'}</span>
+                            <span>•</span>
+                            <span>{task.estimated_hours}h</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ) : (
-              <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-3">
-                <p className="text-xs text-slate-600">
-                  Upload your CV to calculate your ATS match and benchmark against roles.
-                </p>
+              <div className="py-4">
+                <EmptyState
+                  icon={<Map className="h-5 w-5 text-brand-600" aria-hidden="true" />}
+                  title="No Active Roadmap"
+                  description="Generate a week-by-week learning plan tailored to your skill gaps."
+                  action={
+                    <Link
+                      to="/roadmap"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-700 transition"
+                    >
+                      Generate Roadmap
+                    </Link>
+                  }
+                  className="p-4 sm:p-6"
+                />
               </div>
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100">
+          <div className="mt-3 pt-2.5 border-t border-slate-100">
             <Link
-              to="/resume"
-              className="flex items-center justify-between text-xs font-medium text-slate-700 hover:text-slate-900 transition"
+              to="/roadmap"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-900 transition"
             >
-              <span>{resume.has_analysis ? 'View resume breakdown' : 'Upload resume'}</span>
-              <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+              <span>{roadmap?.roadmap ? 'View Full Roadmap' : 'Explore Roadmaps'}</span>
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>
           </div>
-        </div>
-      </section>
+        </Card>
 
-      {/* ── 3. Career Progression Pipeline ─────────────────────────────── */}
-      <section className="clean-card p-5 sm:p-6">
-        <div className="flex items-center justify-between mb-4">
+        {/* ── 6. Skills Snapshot Panel (Top 5 Missing Skills from Skill Gap) ─ */}
+        <Card
+          variant="default"
+          className="lg:col-span-4 flex flex-col justify-between p-4 shadow-card"
+        >
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Career Acceleration Sequence</h2>
-            <p className="text-xs text-slate-500">
-              Structured step-by-step path from profile setup to final mock interview.
-            </p>
-          </div>
-          <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 hidden sm:inline">
-            Step {profile.has_profile ? (resume.has_analysis ? (roadmap?.has_roadmap ? '4 of 6' : '3 of 6') : '2 of 6') : '1 of 6'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          <JourneyStep
-            step={1}
-            title="Profile"
-            status={profile.has_profile ? 'completed' : 'active'}
-            to="/profile"
-            icon={User}
-          />
-          <JourneyStep
-            step={2}
-            title="Resume"
-            status={resume.has_analysis ? 'completed' : profile.has_profile ? 'active' : 'upcoming'}
-            to="/resume"
-            icon={FileText}
-          />
-          <JourneyStep
-            step={3}
-            title="Skill Gap"
-            status={resume.has_analysis ? 'completed' : 'upcoming'}
-            to="/skill-gap"
-            icon={Target}
-          />
-          <JourneyStep
-            step={4}
-            title="Roadmap"
-            status={roadmap?.has_roadmap ? 'completed' : 'upcoming'}
-            to="/roadmap"
-            icon={Map}
-          />
-          <JourneyStep
-            step={5}
-            title="AI Mentor"
-            status={profile.has_profile ? 'active' : 'upcoming'}
-            to="/mentor"
-            icon={MessageSquare}
-          />
-          <JourneyStep
-            step={6}
-            title="Interview"
-            status={interview?.has_interview ? 'completed' : 'upcoming'}
-            to="/interview"
-            icon={Video}
-          />
-        </div>
-      </section>
-
-      {/* ── 4. Core Module Status Cards ─────────────────────────────────── */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Profile Card */}
-        <ModuleCard
-          icon={User}
-          title="Profile"
-          badge={profile.has_profile ? `${profile.completeness}%` : 'Incomplete'}
-          badgeColor={profile.has_profile ? 'emerald' : 'amber'}
-        >
-          {profile.has_profile ? (
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Target Role:</span>
-                <span className="font-medium text-slate-800 truncate max-w-[120px]">{profile.target_role || 'Not specified'}</span>
+            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+                  Skill Gaps
+                </h3>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Level:</span>
-                <span className="text-slate-700">{experienceLabel(profile.experience_level || 'student')}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Skills:</span>
-                <span className="text-slate-700">{profile.skills_count}</span>
-              </div>
+              <Link
+                to="/skill-gap"
+                className="text-xs font-medium text-brand-700 hover:text-brand-900 transition"
+              >
+                View all
+              </Link>
             </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Set up your education and career goals for personalized recommendations.
-            </p>
-          )}
-          <Link
-            to="/profile"
-            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
-          >
-            <span>{profile.has_profile ? 'Edit profile' : 'Set up profile'}</span>
-            <ChevronRight className="h-3 w-3 text-slate-400" />
-          </Link>
-        </ModuleCard>
 
-        {/* Resume Card */}
-        <ModuleCard
-          icon={FileText}
-          title="Resume Analyzer"
-          badge={resume.has_analysis ? `Score ${resume.score}` : 'Pending'}
-          badgeColor={resume.has_analysis ? (resume.score >= 75 ? 'emerald' : 'amber') : 'slate'}
-        >
-          {resume.has_analysis ? (
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Detected:</span>
-                <span className="font-medium text-slate-800">{resume.skills_count} skills</span>
+            {topMissingSkills.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-[11px] text-slate-500">
+                  Top competencies to develop for {targetRole || 'your target role'}:
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {topMissingSkills.map((s) => (
+                    <span
+                      key={s.name}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs font-medium text-slate-800 hover:border-brand-300 transition"
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          s.variant === 'brand' ? 'bg-rose-500' : 'bg-amber-500'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <span>{s.name}</span>
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400">
+                        {s.importance}
+                      </span>
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Improvements:</span>
-                <span className="text-slate-700">{resume.improvements_count} suggestions</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Analyses:</span>
-                <span className="text-slate-700">{resume.total_analyses}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Upload PDF to extract skills and receive ATS optimization suggestions.
-            </p>
-          )}
-          <Link
-            to="/resume"
-            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
-          >
-            <span>{resume.has_analysis ? 'View analysis' : 'Upload resume'}</span>
-            <ChevronRight className="h-3 w-3 text-slate-400" />
-          </Link>
-        </ModuleCard>
-
-        {/* Roadmap Card */}
-        <ModuleCard
-          icon={Map}
-          title="Learning Roadmap"
-          badge={roadmap?.has_roadmap ? `${roadmap.completion_percentage}%` : 'Not Started'}
-          badgeColor={roadmap?.has_roadmap ? 'emerald' : 'slate'}
-        >
-          {roadmap?.has_roadmap ? (
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Progress:</span>
-                <span className="font-medium text-slate-800">
-                  {roadmap.completed_tasks_count} / {roadmap.total_tasks} tasks
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full bg-slate-900 transition-all duration-300"
-                  style={{ width: `${roadmap.completion_percentage}%` }}
+            ) : (
+              <div className="py-4">
+                <EmptyState
+                  icon={<Target className="h-5 w-5 text-brand-600" aria-hidden="true" />}
+                  title="No Skill Gap Analysis"
+                  description="Analyze your resume against your target role to spot missing skills."
+                  action={
+                    <Link
+                      to="/skill-gap"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                    >
+                      Run Analysis
+                    </Link>
+                  }
+                  className="p-4 sm:p-6"
                 />
               </div>
-              <div className="flex justify-between text-slate-600 pt-0.5">
-                <span className="text-slate-400">Target:</span>
-                <span className="text-slate-700 truncate max-w-[110px]">{roadmap.target_role}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Generate weekly milestone tasks tailored to fill your identified skill gaps.
-            </p>
-          )}
-          <Link
-            to="/roadmap"
-            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
-          >
-            <span>{roadmap?.has_roadmap ? 'Continue roadmap' : 'Generate roadmap'}</span>
-            <ChevronRight className="h-3 w-3 text-slate-400" />
-          </Link>
-        </ModuleCard>
-
-        {/* Mock Interview Card */}
-        <ModuleCard
-          icon={Video}
-          title="Mock Interview"
-          badge={interview?.has_interview ? `Score ${interview.latest_score}` : 'Available'}
-          badgeColor={interview?.has_interview ? (interview.latest_score >= 75 ? 'emerald' : 'amber') : 'slate'}
-        >
-          {interview?.has_interview ? (
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Latest Score:</span>
-                <span className={`font-medium ${scoreTextColor(interview.latest_score)}`}>
-                  {interview.latest_score}/100
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Practice:</span>
-                <span className="text-slate-700">{interview.total_interviews} runs</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="text-slate-400">Role:</span>
-                <span className="text-slate-700 truncate max-w-[110px]">{interview.target_role || 'General'}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">
-              Practice interview questions with camera, voice dictation, and Qwen AI evaluation.
-            </p>
-          )}
-          <Link
-            to="/interview"
-            className="mt-3.5 inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
-          >
-            <span>{interview?.has_interview ? 'Practice again' : 'Start simulation'}</span>
-            <ChevronRight className="h-3 w-3 text-slate-400" />
-          </Link>
-        </ModuleCard>
-      </section>
-
-      {/* ── 5. Skills & Next Actions ───────────────────────────────────── */}
-      <section className="grid gap-5 lg:grid-cols-3">
-        {/* Skills Inventory */}
-        <div className="lg:col-span-2 clean-card p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Skills Inventory</h3>
-              <p className="text-xs text-slate-500">
-                Aggregated from profile and extracted resume data.
-              </p>
-            </div>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-              {allSkills.length} Total
-            </span>
+            )}
           </div>
 
-          {allSkills.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-1.5">
-                {allSkills.map((skill) => (
-                  <span
-                    key={skill.name}
-                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
-                      skill.source === 'resume'
-                        ? 'bg-slate-100 text-slate-800 border border-slate-200'
-                        : 'bg-white text-slate-700 border border-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        skill.source === 'resume' ? 'bg-indigo-600' : 'bg-slate-400'
-                      }`}
-                    />
-                    {skill.name}
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-4 pt-2 text-[11px] text-slate-500">
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                  Verified via Resume
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  Listed in Profile
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
-              <p className="text-xs text-slate-500">
-                No skills recorded yet. Add skills in your profile or upload a resume.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Priority Actions */}
-        <div className="clean-card p-5 sm:p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-900">Recommended Steps</h3>
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                Action Plan
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {next_steps.length > 0 ? (
-                next_steps.map((step, idx) => (
-                  <Link
-                    key={idx}
-                    to={step.action}
-                    className="block rounded-lg border border-slate-200 p-2.5 hover:bg-slate-50 hover:border-slate-300 transition"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-slate-800 leading-snug">
-                        {step.label}
-                      </span>
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase tracking-wider ${
-                          step.priority === 'high'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : step.priority === 'medium'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {step.priority}
-                      </span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500">
-                  All caught up! Ready for your next mock interview or mentor session.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-100">
+          <div className="mt-3 pt-2.5 border-t border-slate-100">
             <Link
-              to="/mentor"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900 transition"
+              to="/skill-gap"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-900 transition"
             >
-              <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
-              <span>Ask AI Mentor for advice</span>
+              <span>Bridge Your Skills</span>
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>
           </div>
-        </div>
-      </section>
-    </div>
-  )
-}
+        </Card>
 
-// ── Subcomponents ────────────────────────────────────────────────────────
-
-function JourneyStep({
-  step,
-  title,
-  status,
-  to,
-  icon: Icon,
-}: {
-  step: number
-  title: string
-  status: 'completed' | 'active' | 'upcoming'
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-}) {
-  return (
-    <Link
-      to={to}
-      className={`group flex flex-col items-center justify-between rounded-lg p-3 text-center transition border ${
-        status === 'completed'
-          ? 'bg-emerald-50/40 border-emerald-200 hover:bg-emerald-50'
-          : status === 'active'
-          ? 'bg-white border-slate-900 shadow-xs'
-          : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-      }`}
-    >
-      <div className="flex items-center justify-between w-full mb-2">
-        <span
-          className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
-            status === 'completed'
-              ? 'bg-emerald-600 text-white'
-              : status === 'active'
-              ? 'bg-slate-900 text-white'
-              : 'bg-slate-200 text-slate-600'
-          }`}
+        {/* ── 7. Resume Summary Card (Compact, Equal Height, No Gap) ─────── */}
+        <Card
+          variant="default"
+          className="sm:col-span-2 lg:col-span-3 flex flex-col justify-between p-4 shadow-card"
         >
-          {step}
-        </span>
-        {status === 'completed' ? (
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-        ) : (
-          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-        )}
-      </div>
+          <div>
+            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+                  ATS Resume
+                </h3>
+              </div>
+              {dashboard.resume.has_analysis && (
+                <Badge
+                  variant={
+                    dashboard.resume.score >= 70
+                      ? 'success'
+                      : dashboard.resume.score >= 40
+                      ? 'warning'
+                      : 'danger'
+                  }
+                  size="sm"
+                >
+                  {dashboard.resume.score >= 70
+                    ? 'Job Ready'
+                    : dashboard.resume.score >= 40
+                    ? 'In Progress'
+                    : 'Needs Polish'}
+                </Badge>
+              )}
+            </div>
 
-      <Icon
-        className={`h-5 w-5 mb-1.5 ${
-          status === 'completed'
-            ? 'text-emerald-700'
-            : status === 'active'
-            ? 'text-slate-900'
-            : 'text-slate-400'
-        }`}
-      />
+            {dashboard.resume.has_analysis ? (
+              <div className="mt-3 space-y-3">
+                {/* ATS Score Row */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border font-extrabold text-base ${
+                      dashboard.resume.score >= 70
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : dashboard.resume.score >= 40
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                    }`}
+                  >
+                    {dashboard.resume.score}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">
+                      {dashboard.resume.score >= 70 ? 'Strong Alignment' : 'Optimization Needed'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {dashboard.resume.skills_count} skills detected
+                    </p>
+                  </div>
+                </div>
 
-      <span
-        className={`text-xs font-medium ${
-          status === 'completed'
-            ? 'text-emerald-900 font-semibold'
-            : status === 'active'
-            ? 'text-slate-900 font-semibold'
-            : 'text-slate-600'
-        }`}
-      >
-        {title}
-      </span>
-    </Link>
-  )
-}
-
-function ModuleCard({
-  icon: Icon,
-  title,
-  badge,
-  badgeColor,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  badge: string
-  badgeColor: 'emerald' | 'amber' | 'slate'
-  children: React.ReactNode
-}) {
-  const badgeClasses = {
-    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    slate: 'bg-slate-100 text-slate-600 border-slate-200',
-  }
-
-  return (
-    <div className="clean-card p-4 sm:p-5 flex flex-col justify-between">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-100 text-slate-700">
-            <Icon className="h-3.5 w-3.5" />
+                {/* Top 2 Improvements */}
+                {resumeImprovements.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                      Top Recommendations:
+                    </span>
+                    <ul className="space-y-1 text-xs text-slate-600">
+                      {resumeImprovements.map((imp, i) => (
+                        <li key={i} className="flex items-start gap-1.5 line-clamp-2">
+                          <span className="text-brand-600 font-bold">•</span>
+                          <span className="leading-snug text-[11px]">{imp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-4">
+                <EmptyState
+                  icon={<FileText className="h-5 w-5 text-brand-600" aria-hidden="true" />}
+                  title="No Resume Uploaded"
+                  description="Upload your resume to check ATS keyword density and formatting."
+                  action={
+                    <Link
+                      to="/resume"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                    >
+                      Upload Resume
+                    </Link>
+                  }
+                  className="p-4 sm:p-6"
+                />
+              </div>
+            )}
           </div>
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${badgeClasses[badgeColor]}`}>
-            {badge}
-          </span>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-100">
+            <Link
+              to="/resume"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-900 transition"
+            >
+              <span>{dashboard.resume.has_analysis ? 'Open Analysis' : 'Upload Resume'}</span>
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            </Link>
+          </div>
+        </Card>
+      </section>
+
+      {/* ── 8. Recent Activity (Only shown if genuine activity exists) ──────── */}
+      {recentActivities.length > 0 && (
+        <section
+          aria-label="Recent Account Activity"
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-card"
+        >
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+            <span className="text-xs font-bold text-slate-900">Recent Milestones</span>
+            <span className="text-[11px] text-slate-500">Live event log</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {recentActivities.map((act) => {
+              const Icon = act.icon
+              return (
+                <Link
+                  key={act.id}
+                  to={act.to}
+                  className="flex items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 p-2.5 hover:border-brand-200 hover:bg-brand-50/20 transition group"
+                >
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white border border-slate-200 text-slate-700 group-hover:text-brand-600 transition shadow-2xs">
+                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-xs font-bold text-slate-900 group-hover:text-brand-700 transition truncate">
+                        {act.title}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 shrink-0">{act.date}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                      {act.detail}
+                    </p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Progressive Disclosure Drawer: All Steps ───────────────────────── */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        title="All Recommended Steps"
+        position="right"
+      >
+        <div className="space-y-3 pt-2">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Prioritized actions generated by CareerPilot AI to optimize your preparation roadmap:
+          </p>
+
+          <div className="space-y-2.5 mt-3">
+            {dashboard.next_steps.map((step, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between gap-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+                        {i + 1}
+                      </span>
+                      <h4 className="text-xs font-bold text-slate-900">{step.label}</h4>
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      step.priority === 'high'
+                        ? 'danger'
+                        : step.priority === 'medium'
+                        ? 'warning'
+                        : 'neutral'
+                    }
+                    size="sm"
+                  >
+                    {step.priority}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-end pt-1">
+                  <Link
+                    to={step.action}
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                  >
+                    <span>Take Action</span>
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <h3 className="text-xs font-semibold text-slate-900 mb-2">{title}</h3>
-        {children}
-      </div>
+      </Drawer>
     </div>
   )
 }

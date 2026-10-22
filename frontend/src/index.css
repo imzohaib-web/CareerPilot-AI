@@ -2,14 +2,84 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+:root {
+  /* Surface colors */
+  --surface-base: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-muted: #e2e8f0;
+
+  /* Typography / Content tiers (all strictly >= 4.5:1 on light surfaces) */
+  --content-primary: #0f172a;    /* slate-900: 15.3:1 on white, 14.7:1 on slate-50 */
+  --content-secondary: #334155;  /* slate-700: 9.6:1 on white, 9.2:1 on slate-50 */
+  --content-tertiary: #475569;   /* slate-600: 5.9:1 on white, 5.6:1 on slate-50 */
+  --content-muted: #64748b;      /* slate-500: used only for disabled/subtle indicators */
+
+  /* Borders */
+  --border-subtle: #f1f5f9;
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Brand / Primary */
+  --color-brand-primary: #7c3aed; /* violet-600 */
+  --color-brand-hover: #6d28d9;   /* violet-700 */
+  --color-brand-active: #5b21b6;  /* violet-800 */
+  --color-brand-subtle: #f5f3ff;  /* violet-50 */
+  --color-brand-border: #ddd6fe;  /* violet-200 */
+
+  /* Semantic Feedback */
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-success-text: #065f46;  /* >= 6.5:1 contrast */
+  --color-success-solid: #059669;
+
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #78350f;  /* >= 6.8:1 contrast */
+  --color-warning-solid: #d97706;
+
+  --color-danger-bg: #fff1f2;
+  --color-danger-border: #fecdd3;
+  --color-danger-text: #881337;   /* >= 7.0:1 contrast */
+  --color-danger-solid: #e11d48;
+
+  --color-info-bg: #f0f9ff;
+  --color-info-border: #bae6fd;
+  --color-info-text: #075985;     /* >= 6.2:1 contrast */
+  --color-info-solid: #0284c7;
+
+  /* Focus ring */
+  --ring-color: #7c3aed;
+  --ring-offset: #ffffff;
+
+  /* Motion */
+  --motion-fast: 150ms;
+  --motion-normal: 250ms;
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 @layer base {
   html {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: "InterVariable", "Plus Jakarta Sans", Inter, system-ui, -apple-system, sans-serif;
+    color: var(--content-primary);
+    background-color: var(--surface-base);
   }
 
   body {
     @apply bg-slate-50 text-slate-800 antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Accessible focus indicators across all focusable elements */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ring-offset), 0 0 0 4px var(--ring-color);
+  }
+
+  /* Tabular numbers for clean numeric layout in stats, scores, and metrics */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 
   /* Custom subtle scrollbar */
@@ -25,32 +95,74 @@
   }
 }
 
+/* Reduced motion preference respected */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer utilities {
+  /* Typography scale tokens */
+  .type-display {
+    @apply text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900;
+  }
+  .type-h1 {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+  .type-h2 {
+    @apply text-xl font-bold tracking-tight text-slate-900;
+  }
+  .type-h3 {
+    @apply text-base font-semibold text-slate-900;
+  }
+  .type-body {
+    @apply text-sm text-slate-700 leading-relaxed;
+  }
+  .type-small {
+    @apply text-xs text-slate-600 leading-normal;
+  }
+  .type-caption {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-600;
+  }
+
+  /* Focus ring helper */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+  }
+
+  /* Surface and card classes */
   .app-header {
-    @apply bg-white border-b border-slate-200;
+    @apply bg-white border-b border-slate-200/90 shadow-xs;
   }
 
   .clean-card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-150;
+    @apply bg-white rounded-xl border border-slate-200/90 shadow-card transition-all duration-150;
   }
 
   .clean-card-interactive {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md transition-all duration-150;
+    @apply bg-white rounded-xl border border-slate-200/90 shadow-card hover:border-brand-300 hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200;
   }
 
+  /* Legacy button helpers for backwards compatibility with existing pages */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-slate-800 active:scale-[0.99] focus-ring transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-brand {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 active:scale-[0.99] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-brand-700 active:scale-[0.99] focus-ring transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 active:scale-[0.99] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 active:scale-[0.99] focus-ring transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-ring transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none;
   }
 }
