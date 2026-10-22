@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load backend/.env explicitly so the app works from any working directory.
 # Real environment variables (e.g. Render dashboard values) always win —
 # load_dotenv never overrides existing environment variables.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
 def _parse_origins(raw: str) -> list[str]:

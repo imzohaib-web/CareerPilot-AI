@@ -1,4 +1,4 @@
-"""CareerPilot AI — FastAPI application entry point."""
+"""CareerPilot AI — FastAPI application entry point (v1.1)."""
 
 import asyncio
 import logging
@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import config
-from app.database.mongodb import close_db, connect_db, get_db
+from app.database.mongodb import close_db, connect_db, get_connection_status, get_db, is_connected
 from app.routes import ai, auth, chat, interview, profile, progress, rag, resume, roadmap, skill_gap
 from app.services.knowledge_seeder import seed_knowledge_background
 
@@ -26,9 +26,13 @@ async def lifespan(app: FastAPI):
         "CORS allowed origins: %s",
         ", ".join(config.CORS_ORIGINS) if config.CORS_ORIGINS else "(none configured)",
     )
-    await connect_db()
-    # Non-blocking startup seeding of curated knowledge base (background task)
-    asyncio.create_task(seed_knowledge_background())
+    connected = await connect_db()
+    if not connected:
+        logger.warning("Running in memory mode: using local seed data")
+        asyncio.create_task(seed_knowledge_background(offline=True))
+    else:
+        # Non-blocking startup seeding of curated knowledge base (background task)
+        asyncio.create_task(seed_knowledge_background())
 
     # Create rate limiting and abuse prevention indexes
     try:
@@ -83,17 +87,14 @@ app.include_router(chat.router)
 
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Report API health and MongoDB connectivity (lightweight ping). Never rate limited."""
-    database = "connected"
+    """Report API health, storage mode, and MongoDB connectivity. Never rate limited."""
     try:
-        # Throttled reconnect attempt — no-op when already connected. A
-        # transient startup failure (DNS propagation, Atlas IP whitelist
-        # added after deploy) therefore self-heals without a restart.
         await connect_db()
-        await get_db().command("ping")
+        if is_connected():
+            await get_db().command("ping")
     except Exception:
-        database = "disconnected"
-    return {"status": "ok", "database": database}
+        pass
+    return get_connection_status()
 
 
 @app.exception_handler(RateLimitExceeded)
