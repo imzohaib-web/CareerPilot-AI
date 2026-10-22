@@ -46,8 +46,18 @@ def is_connected() -> bool:
     return _client is not None
 
 
-def get_connection_status() -> dict[str, str | None]:
-    """Return sanitized connection metadata and storage mode for health and diagnostics."""
+def get_connection_status() -> dict[str, str]:
+    """Return minimal sanitized connection status for the public unauthenticated health probe."""
+    connected = _client is not None
+    return {
+        "status": "ok",
+        "database": "connected" if connected else "disconnected",
+        "storage_mode": "mongodb" if connected else "memory",
+    }
+
+
+def get_connection_details() -> dict[str, str | None]:
+    """Return full diagnostic metadata for the authenticated health check details endpoint."""
     connected = _client is not None
     return {
         "status": "ok",

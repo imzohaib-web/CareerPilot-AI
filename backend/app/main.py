@@ -4,13 +4,21 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import config
-from app.database.mongodb import close_db, connect_db, get_connection_status, get_db, is_connected
+from app.database.mongodb import (
+    close_db,
+    connect_db,
+    get_connection_details,
+    get_connection_status,
+    get_db,
+    is_connected,
+)
 from app.routes import ai, auth, chat, interview, profile, progress, rag, resume, roadmap, skill_gap
+from app.services.dependencies import get_current_user
 from app.services.knowledge_seeder import seed_knowledge_background
 
 logging.basicConfig(level=logging.INFO)
@@ -95,6 +103,18 @@ async def health_check() -> dict:
     except Exception:
         pass
     return get_connection_status()
+
+
+@app.get("/api/health/details")
+async def health_check_details(_: dict = Depends(get_current_user)) -> dict:
+    """Report detailed connection diagnostics for authenticated debugging."""
+    try:
+        await connect_db()
+        if is_connected():
+            await get_db().command("ping")
+    except Exception:
+        pass
+    return get_connection_details()
 
 
 @app.exception_handler(RateLimitExceeded)

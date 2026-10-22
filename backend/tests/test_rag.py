@@ -1142,14 +1142,104 @@ async def test_get_documents_endpoint_returns_expected_shape():
 
 @pytest.mark.asyncio
 async def test_health_endpoint_reports_storage_mode():
+    app.dependency_overrides.clear()
     async with _make_api_client() as client:
         resp = await client.get("/api/health")
         assert resp.status_code == 200
         data = resp.json()
-        assert "storage_mode" in data
+        assert set(data.keys()) == {"status", "database", "storage_mode"}
         assert data["storage_mode"] in ("mongodb", "memory")
-        assert "status" in data
+        assert data["database"] in ("connected", "disconnected")
         assert data["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_both_modes():
+    app.dependency_overrides.clear()
+    async with _make_api_client() as client:
+        with patch("app.main.is_connected", return_value=False), patch(
+            "app.main.get_connection_status",
+            return_value={"status": "ok", "database": "disconnected", "storage_mode": "memory"},
+        ):
+            resp = await client.get("/api/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert set(data.keys()) == {"status", "database", "storage_mode"}
+            assert data["database"] == "disconnected"
+            assert data["storage_mode"] == "memory"
+
+        with patch("app.main.is_connected", return_value=True), patch(
+            "app.main.get_connection_status",
+            return_value={"status": "ok", "database": "connected", "storage_mode": "mongodb"},
+        ):
+            resp = await client.get("/api/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert set(data.keys()) == {"status", "database", "storage_mode"}
+            assert data["database"] == "connected"
+            assert data["storage_mode"] == "mongodb"
+
+
+@pytest.mark.asyncio
+async def test_health_details_endpoint_requires_auth_and_covers_both_modes():
+    app.dependency_overrides.clear()
+    # 1. Unauthenticated request must return 401
+    async with _make_api_client() as client:
+        unauth_resp = await client.get("/api/health/details")
+        assert unauth_resp.status_code == 401
+
+    # 2. Authenticated request in mongodb mode
+    async with _make_api_client(_override_user()) as client:
+        with patch("app.main.is_connected", return_value=True), patch(
+            "app.main.get_connection_details",
+            return_value={
+                "status": "ok",
+                "database": "connected",
+                "storage_mode": "mongodb",
+                "database_name": "careerpilot_ai",
+                "error_category": None,
+            },
+        ):
+            auth_resp = await client.get("/api/health/details")
+            assert auth_resp.status_code == 200
+            data = auth_resp.json()
+            assert set(data.keys()) == {
+                "status",
+                "database",
+                "storage_mode",
+                "database_name",
+                "error_category",
+            }
+            assert data["storage_mode"] == "mongodb"
+            assert data["database"] == "connected"
+            assert data["database_name"] == "careerpilot_ai"
+            assert data["error_category"] is None
+
+        # 3. Authenticated request in memory mode
+        with patch("app.main.is_connected", return_value=False), patch(
+            "app.main.get_connection_details",
+            return_value={
+                "status": "ok",
+                "database": "disconnected",
+                "storage_mode": "memory",
+                "database_name": None,
+                "error_category": "server_selection_timeout",
+            },
+        ):
+            auth_resp = await client.get("/api/health/details")
+            assert auth_resp.status_code == 200
+            data = auth_resp.json()
+            assert set(data.keys()) == {
+                "status",
+                "database",
+                "storage_mode",
+                "database_name",
+                "error_category",
+            }
+            assert data["storage_mode"] == "memory"
+            assert data["database"] == "disconnected"
+            assert data["database_name"] is None
+            assert data["error_category"] == "server_selection_timeout"
 
 
 @pytest.mark.asyncio
