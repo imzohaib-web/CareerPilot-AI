@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.learning import VerifiedSkill
+
 
 class ProfileProgress(BaseModel):
     """Career profile progress summary."""
@@ -73,7 +75,7 @@ class DashboardResponse(BaseModel):
     resume: ResumeProgress = Field(default_factory=ResumeProgress)
     roadmap: RoadmapProgress = Field(default_factory=RoadmapProgress)
     interview: InterviewProgress = Field(default_factory=InterviewProgress)
-    verified_skills: list[VerifiedSkillProgress] = Field(default_factory=list)
+    verified_skills: list[VerifiedSkillProgress | VerifiedSkill] = Field(default_factory=list)
     readiness_score: int = Field(default=0, ge=0, le=100)
     overall_progress: int = Field(default=0, ge=0, le=100)
     next_steps: list[NextStep] = Field(default_factory=list)

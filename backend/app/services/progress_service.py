@@ -22,6 +22,7 @@ from app.schemas.progress import (
     ProfileProgress,
     ResumeProgress,
     RoadmapProgress,
+    VerifiedSkillProgress,
 )
 from app.schemas.resume import ResumeAnalysis
 from app.services.learning_service import get_verified_skills
@@ -89,7 +90,10 @@ async def get_dashboard(user_id: str) -> DashboardResponse:
         resume=resume_progress,
         roadmap=roadmap_progress,
         interview=interview_progress,
-        verified_skills=verified_skills,
+        verified_skills=[
+            VerifiedSkillProgress(name=v.name, score=v.score, verified_at=v.verified_at)
+            for v in verified_skills
+        ],
         readiness_score=readiness_score,
         overall_progress=overall_progress,
         next_steps=next_steps,
