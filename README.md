@@ -3,7 +3,7 @@
 > **Your Personal AI Career Mentor, Resume Strategist & Interview Coach**
 > Built for the **Alibaba Cloud AI Hackathon Pakistan 2026** · Theme: *AI for Pakistan's Future* · Build Window: August 29 – September 4, 2026
 
-[![Backend Tests](https://img.shields.io/badge/pytest-194%20passed-emerald?style=flat-square&logo=pytest)](backend/tests/)
+[![Backend Tests](https://img.shields.io/badge/pytest-274%20passed-emerald?style=flat-square&logo=pytest)](backend/tests/)
 [![Frontend](https://img.shields.io/badge/frontend-React%2019%20%7C%20TypeScript-blue?style=flat-square&logo=react)](frontend/)
 [![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20Python%203.13-teal?style=flat-square&logo=fastapi)](backend/)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-Alibaba%20Cloud%20Qwen%20(qwen--plus)-orange?style=flat-square)](https://www.alibabacloud.com/en/solutions/model-studio)
@@ -83,15 +83,18 @@ Entering the technical job market presents steep hurdles for students and early-
 | 2 | **Career Profile** | `/api/profile` / `/profile` | **Implemented** (100%) | Single-profile-per-user lifecycle (`GET`, `POST`, `PUT`), educational background, target role, baseline skills, experience level. |
 | 3 | **AI Resume Analyzer** | `/api/resume` / `/resume` | **Implemented** (100%) | PDF magic bytes & size validation, text extraction via PyMuPDF (`fitz`), structured Qwen analysis (score 0–100, strengths, weaknesses, missing info, extracted sections). |
 | 4 | **Skill Gap Analysis** | `/api/analyze-gap` / `/skill-gap` | **Implemented** (100%) | Pre-fills from profile & resume, compares against target job description with grounded RAG career rubric sources, returns match score (0–100), missing technical/soft skills, competency breakdown. |
-| 5 | **Personalized Roadmap** | `/api/roadmap` / `/roadmap` | **Implemented** (100%) | Generates time-boxed phased plans grounded in curated industry curricula, milestones, resource links, per-task source refs, persistent task completion checkboxes. |
+| 5 | **Personalized Roadmap & Verification** | `/api/roadmap` / `/roadmap` | **Implemented** (100%) | Generates time-boxed phased plans grounded in curated industry curricula, milestones, resource links, per-task source refs, and interactive skill assessment testing. |
 | 6 | **AI Career Mentor** | `/api/chat` / `/mentor` | **Implemented** (100%) | Multi-turn conversational mentor grounded in user profile, latest resume analysis, and RAG knowledge base chunks; bounded history (16 turns / 24k chars); anti-leak guardrails. |
 | 7 | **AI Mock Interview** | `/api/interview` / `/interview` | **Implemented** (100%) | Technical, behavioral & situational question generation; in-browser video/mic stream preview; Web Speech API speech-to-text; TTS read-aloud; STAR rubric evaluation with grounded RAG rubric sources & scorecards. |
 | 8 | **RAG Knowledge Base** | `/api/rag` / `/rag` | **Implemented** (100%) | DashScope `text-embedding-v3` (1024-dim dense embeddings) + whole-corpus cached BM25 weighted RRF hybrid fusion (0.7 vector / 0.3 keyword), dual scopes ("global" vs "user"), strict confidence thresholding & refusal path, inline `[1]` citation chips, search-only mode, and cross-module pipeline grounding. |
-| 9 | **Progress Dashboard** | `/api/progress` / `/` | **Implemented** (100%) | Real-time aggregation of profile completeness (40% weight) + resume readiness score (60% weight), roadmap task progress, interview performance, dynamic next steps. |
+| 9 | **Progress Dashboard** | `/api/progress` / `/` | **Implemented** (100%) | Real-time aggregation of profile completeness (40% weight) + resume readiness score (60% weight), roadmap verified & completed task progress, interview performance, dynamic next steps. |
 | 10 | **Offline Mode Fallback** | Backend Database Layer | **Implemented** (100%) | Automatic transparent in-memory cache across users, profiles, resumes, skill gaps, roadmaps, interviews, and RAG chunks when MongoDB is disconnected. |
-| 11 | **GitHub Profile Scraper** | — | *Planned (Post-MVP)* | Automatic extraction of repositories, tech stacks, and commit activity. |
-| 12 | **LinkedIn Optimizer** | — | *Planned (Post-MVP)* | Headline, summary, and keyword recommendations for LinkedIn profiles. |
-| 13 | **Multi-Language Urdu Support**| — | *Planned (Post-MVP)* | Localization and multilingual resume parsing for regional candidates. |
+| 11 | **Skill Verification Assessments** | `/api/learning` / `/roadmap` | **Implemented** (100%) | Generates role/task-tailored 3-question multiple-choice quizzes with strict anti-leakage; passing (>=2/3) marks tasks verified and updates user's verified skills portfolio. |
+| 12 | **Study Calendar & Streak Tracker** | `/api/learning/calendar` / `/calendar` | **Implemented** (100%) | Logs daily study hours and topics, tracks consecutive active days and target weekly hours, timezone-aware (`Asia/Karachi`), and computes heatmaps. |
+| 13 | **Learning & Inactivity Alerts** | `/api/alerts` / `/alerts` | **Implemented** (100%) | Generates timely notifications for inactivity (>3 days), upcoming milestones, or quiz feedback; supports optional non-blocking SMTP email dispatches and preference controls. |
+| 14 | **GitHub Profile Scraper** | — | *Planned (Post-MVP)* | Automatic extraction of repositories, tech stacks, and commit activity. |
+| 15 | **LinkedIn Optimizer** | — | *Planned (Post-MVP)* | Headline, summary, and keyword recommendations for LinkedIn profiles. |
+| 16 | **Multi-Language Urdu Support**| — | *Planned (Post-MVP)* | Localization and multilingual resume parsing for regional candidates. |
 
 ---
 
@@ -500,6 +503,23 @@ All protected endpoints require an `Authorization: Bearer <JWT>` header.
 | `POST` | `/api/rag/query` | Bearer | `RAGQueryRequest` (`query, top_k, scope, mode`) | `200 OK` (`RetrievalResult`: chunks with `fused_rank`, `keyword_score`, `vector_score`, `scope`, `section_title`) | `401`, `422` |
 | `POST` | `/api/rag/chat` | Bearer | `RAGChatRequest` (`query, conversation_id`) | `200 OK` (`RAGChatResponse`: `answer`, `citations`, `retrieval_status`: "grounded" \| "weak" \| "no_context", `sources`) | `401`, `500` |
 
+### Learning, Assessments & Study Calendar Endpoints (`/api/learning`)
+
+| Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/learning/calendar` | Bearer | Query params: `month` (YYYY-MM), `timezone` (default `UTC`, e.g. `Asia/Karachi`) | `200 OK` (`StudyCalendarResponse`: streak, active_days, target_hours, days) | `401`, `422` |
+| `PUT` | `/api/learning/calendar/preferences` | Bearer | `StudyPreferencesUpdate` (`missed_days_threshold`, `weekly_target_hours`) | `200 OK` (`StudyPreferencesResponse`) | `401`, `422` |
+| `PUT` | `/api/learning/calendar/{study_date}` | Bearer | `StudyDayUpdate` (`hours_spent`, `notes`, `topics_covered`) | `204 No Content` | `401`, `422` |
+| `POST` | `/api/learning/roadmaps/{roadmap_id}/tasks/{task_id}/assessment` | Bearer | None | `200 OK` (`SkillQuizResponse`: id, roadmap_id, task_id, questions [answers omitted]) | `401`, `404`, `429`, `502` |
+| `POST` | `/api/learning/assessments/{assessment_id}/submit` | Bearer | `SkillQuizSubmission` (`answers: dict[str, int]`) | `200 OK` (`SkillQuizResult`: score, passed, feedback, explanations, verified_skill) | `400`, `401`, `404` |
+
+### Learning Alerts Endpoints (`/api/alerts`)
+
+| Method | Endpoint | Auth | Request Body | Success Response | Error Codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/alerts` | Bearer | None | `200 OK` (`LearningAlertsResponse`: alerts, unread_count) | `401` |
+| `PUT` | `/api/alerts/{alert_id}/read` | Bearer | None | `200 OK` (`LearningAlert`: status "read") | `401`, `404` |
+
 ### Progress Dashboard & System Endpoints
 
 | Method | Endpoint | Auth | Description | Success Response |
@@ -523,6 +543,11 @@ erDiagram
     USERS ||--o{ INTERVIEWS : practices
     USERS ||--o{ CONVERSATIONS : chats
     USERS ||--o{ RAG_DOCUMENTS : ingests
+    USERS ||--o{ LEARNING_ASSESSMENTS : takes
+    USERS ||--o{ VERIFIED_SKILLS : achieves
+    USERS ||--o{ LEARNING_ALERTS : receives
+    USERS ||--o{ LEARNING_DAYS : logs
+    USERS ||--o{ LEARNING_PREFERENCES : configures
     RAG_DOCUMENTS ||--o{ RAG_CHUNKS : contains
 
     USERS {
@@ -572,8 +597,58 @@ erDiagram
         int time_frame_weeks
         int weekly_hours
         object roadmap "phases, tasks, milestones"
-        string[] completed_tasks "List of completed task IDs"
+        string[] completed_tasks "Union of completed & verified task IDs"
+        string[] verified_tasks "Task IDs verified through assessment quizzes"
         datetime created_at
+    }
+
+    LEARNING_ASSESSMENTS {
+        ObjectId _id PK
+        ObjectId user_id FK "Indexed"
+        ObjectId roadmap_id FK
+        string task_id
+        object[] questions "id, question, options (correct_option stored server-side only)"
+        int score
+        boolean passed
+        datetime created_at
+    }
+
+    VERIFIED_SKILLS {
+        ObjectId _id PK
+        ObjectId user_id FK "Compound Unique (user_id, skill_key)"
+        string skill_key
+        string skill_name
+        string source_roadmap_id
+        datetime verified_at
+    }
+
+    LEARNING_ALERTS {
+        ObjectId _id PK
+        ObjectId user_id FK "Indexed"
+        string dedupe_key "Unique, Sparse"
+        string type "inactivity | milestone | quiz_result"
+        string title
+        string message
+        string status "unread | read"
+        datetime created_at
+    }
+
+    LEARNING_DAYS {
+        ObjectId _id PK
+        ObjectId user_id FK "Compound Unique (user_id, roadmap_id, date)"
+        ObjectId roadmap_id FK
+        string date "YYYY-MM-DD"
+        float hours_spent
+        string[] topics_covered
+        string notes
+    }
+
+    LEARNING_PREFERENCES {
+        ObjectId _id PK
+        ObjectId user_id FK "Indexed, Unique"
+        int missed_days_threshold
+        float weekly_target_hours
+        datetime updated_at
     }
 
     INTERVIEWS {
@@ -622,7 +697,7 @@ erDiagram
     }
 ```
 
-> **Note on Progress:** There is intentionally **no static `progress` collection**. The `/api/progress` endpoint dynamically aggregates data from `career_profiles`, `resumes`, `roadmaps`, and `interviews` on demand, guaranteeing zero stale metric divergence.
+> **Note on Progress:** There is intentionally **no static `progress` collection**. The `/api/progress` endpoint dynamically aggregates data from `career_profiles`, `resumes`, `roadmaps` (union of verified and completed tasks), and `interviews` on demand, guaranteeing zero stale metric divergence.
 
 ### Automatic Indexes (Created Idempotently on Startup)
 ```python
@@ -632,6 +707,12 @@ await db.resumes.create_index("user_id")
 await db.skill_gap_analyses.create_index("user_id")
 await db.conversations.create_index("user_id")
 await db.roadmaps.create_index("user_id")
+await db.learning_assessments.create_index([("user_id", 1), ("created_at", -1)])
+await db.verified_skills.create_index([("user_id", 1), ("skill_key", 1)], unique=True)
+await db.learning_alerts.create_index([("user_id", 1), ("created_at", -1)])
+await db.learning_alerts.create_index([("user_id", 1), ("dedupe_key", 1)], unique=True, sparse=True)
+await db.learning_days.create_index([("user_id", 1), ("roadmap_id", 1), ("date", 1)], unique=True)
+await db.learning_preferences.create_index("user_id", unique=True)
 await db.interviews.create_index("user_id")
 await db.rag_documents.create_index("user_id")
 await db.rag_documents.create_index([("scope", 1), ("user_id", 1)])
@@ -848,6 +929,15 @@ FRONTEND_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:517
 
 # Maximum resume upload size in megabytes (default: 5)
 RESUME_MAX_SIZE_MB=5
+
+# Optional SMTP configuration for skill assessment and learning alert emails (non-blocking)
+# In-app alerts and notifications function fully without SMTP configured.
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_SENDER=CareerPilot AI <no-reply@example.com>
+SMTP_USE_STARTTLS=true
 ```
 
 ### Frontend (`frontend/.env`)
@@ -938,7 +1028,7 @@ npm run dev
 ## 15. Testing and Validation
 
 ### Backend Test Suite (Pytest)
-The backend includes 221 automated tests verifying route behavior, authentication, CORS headers, service edge cases, mocked LLM parsing, hybrid RAG retrieval, BM25 scoring, and evaluation pipelines:
+The backend includes **274 automated tests** verifying route behavior, authentication, CORS headers, service edge cases, mocked LLM parsing, hybrid RAG retrieval, BM25 scoring, evaluation pipelines, roadmap task completion unions, skill quiz anti-leak security, study calendar timezones, and API contracts:
 
 ```bash
 cd backend
@@ -949,30 +1039,55 @@ cd backend
 ============================= test session starts =============================
 platform win32 -- Python 3.13.x, pytest-8.4.1, pluggy-1.6.0
 plugins: anyio-4.14.2, asyncio-1.1.0
-collected 221 items
+collected 274 items
 
+tests/test_api_contracts.py ...........                                  [  4%]
 tests/test_chat.py ................................................      [ 21%]
-tests/test_cors.py ...........                                           [ 26%]
-tests/test_interview.py .................                                [ 34%]
-tests/test_progress.py ....................................              [ 50%]
+tests/test_cors.py ...........                                           [ 25%]
+tests/test_interview.py .................                                [ 31%]
+tests/test_learning.py .................                                 [ 38%]
+tests/test_progress.py ....................................              [ 51%]
 tests/test_qwen_service.py ........                                      [ 54%]
-tests/test_rag.py ...............................                        [ 68%]
-tests/test_resume.py .........................                           [ 79%]
-tests/test_roadmap.py .........                                          [ 83%]
-tests/test_skill_gap.py .....                                            [ 86%]
-tests/test_rag_pipeline.py ...............................               [100%]
+tests/test_rag.py ...............................                        [ 65%]
+tests/test_rag_pipeline.py ...............................               [ 76%]
+tests/test_resume.py .........................                           [ 85%]
+tests/test_roadmap.py ..........                                         [ 89%]
+tests/test_skill_gap.py .....                                            [ 91%]
+tests/test_study_tracker.py ........................                     [100%]
 
-============================= 221 passed in 21.45s ============================
+============================= 274 passed in 23.41s ============================
 ```
 
-### Frontend Type-Checking and Build Verification
+### Frontend Test Suite (Vitest)
+The frontend includes **36 automated unit and contract tests** across 7 test suites validating authentication sessions, API error categorization, speech recognition resilience, ErrorBoundary recovery, offline mode fallbacks, interview star grading, and learning data normalizers:
+
+```bash
+cd frontend
+npm test
+```
+
+```
+ ✓ src/test/readinessFormula.test.ts (5 tests)
+ ✓ src/test/streamClient.test.ts (8 tests)
+ ✓ src/test/ragContracts.test.ts (7 tests)
+ ✓ src/test/learningContracts.test.ts (6 tests)
+ ✓ src/test/streamingChat.test.tsx (3 tests)
+ ✓ src/test/StudyCalendarPage.test.tsx (2 tests)
+ ✓ src/test/RagKnowledgePage.test.tsx (5 tests)
+
+ Test Files  7 passed (7)
+      Tests  36 passed (36)
+   Duration  1.67s
+```
+
+### Frontend Type-Checking, Linting and Build Verification
 ```bash
 cd frontend
 
-# TypeScript strict compile check
+# TypeScript strict compile check (0 errors)
 npx tsc -b
 
-# Oxlint linter check
+# Oxlint linter check (0 errors)
 npx oxlint
 
 # Production bundle build

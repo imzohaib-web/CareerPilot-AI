@@ -50,6 +50,14 @@ class InterviewProgress(BaseModel):
     target_role: str = ""
 
 
+class VerifiedSkillProgress(BaseModel):
+    """A roadmap skill proven by passing its assessment."""
+
+    name: str
+    score: int = Field(ge=70, le=100)
+    verified_at: datetime
+
+
 class NextStep(BaseModel):
     """An actionable next step for the user."""
 
@@ -65,6 +73,7 @@ class DashboardResponse(BaseModel):
     resume: ResumeProgress = Field(default_factory=ResumeProgress)
     roadmap: RoadmapProgress = Field(default_factory=RoadmapProgress)
     interview: InterviewProgress = Field(default_factory=InterviewProgress)
+    verified_skills: list[VerifiedSkillProgress] = Field(default_factory=list)
     readiness_score: int = Field(default=0, ge=0, le=100)
     overall_progress: int = Field(default=0, ge=0, le=100)
     next_steps: list[NextStep] = Field(default_factory=list)

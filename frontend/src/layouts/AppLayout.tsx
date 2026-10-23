@@ -14,6 +14,8 @@ import {
   Menu,
   X,
   Compass,
+  Bell,
+  CalendarDays,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -63,6 +65,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     name: 'Learn',
     items: [
       { to: '/roadmap', label: 'Roadmap', icon: Map, moduleKey: 'roadmap' },
+      { to: '/calendar', label: 'Learning Calendar', icon: CalendarDays },
+      { to: '/alerts', label: 'Learning Alerts', icon: Bell },
       { to: '/mentor', label: 'AI Mentor', icon: MessageSquare },
     ],
   },
@@ -84,6 +88,7 @@ const NAV_GROUPS: NavGroupDef[] = [
 const MOBILE_BOTTOM_ITEMS: NavItemDef[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/roadmap', label: 'Roadmap', icon: Map },
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/mentor', label: 'Mentor', icon: MessageSquare },
   { to: '/interview', label: 'Interview', icon: Video },
 ]
@@ -863,6 +868,10 @@ function getBreadcrumbsForPath(pathname: string): string[] {
       return ['Build', 'Skill Gap Analyzer']
     case '/roadmap':
       return ['Learn', 'Learning Roadmap']
+    case '/calendar':
+      return ['Learn', 'Learning Calendar']
+    case '/alerts':
+      return ['Learn', 'Learning Alerts']
     case '/mentor':
       return ['Learn', 'AI Career Mentor']
     case '/interview':

@@ -17,9 +17,21 @@ from app.database.mongodb import (
     get_db,
     is_connected,
 )
-from app.routes import ai, auth, chat, interview, profile, progress, rag, resume, roadmap, skill_gap
-from app.services.dependencies import get_current_user
+from app.routes import (
+    ai,
+    auth,
+    chat,
+    interview,
+    learning,
+    profile,
+    progress,
+    rag,
+    resume,
+    roadmap,
+    skill_gap,
+)
 from app.services.knowledge_seeder import seed_knowledge_background
+from app.services.dependencies import get_current_user
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,6 +118,7 @@ app.include_router(roadmap.router)
 app.include_router(interview.router)
 app.include_router(rag.router)
 app.include_router(progress.router)
+app.include_router(learning.router)
 app.include_router(chat.router)
 
 

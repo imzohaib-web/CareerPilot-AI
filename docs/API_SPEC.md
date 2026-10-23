@@ -40,7 +40,21 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 |--------|------|--------|-------------|
 | POST | /api/roadmap/generate | IMPLEMENTED | Generate personalized roadmap from skill gaps (AI) |
 | GET | /api/roadmap/latest | IMPLEMENTED | Fetch the user's latest roadmap |
-| PUT | /api/roadmap/{roadmap_id}/tasks/{task_id}/toggle | IMPLEMENTED | Toggle a roadmap task's completion |
+| PUT | /api/roadmap/{roadmap_id}/tasks/{task_id}/toggle | DEPRECATED | Completion is assessment-gated; returns 409 |
+
+## LEARNING TRACKER & ALERTS
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/learning/roadmaps/{roadmap_id}/tasks/{task_id}/assessment | Generate a ten-question quiz for an owned roadmap task |
+| POST | /api/learning/assessments/{assessment_id}/submit | Grade answers; a score of 70% or more verifies the skill and completes the task |
+| GET | /api/learning/calendar?month=YYYY-MM&timezone=IANA | Read the signed-in user's study-day logs and missed-day status for their latest roadmap |
+| PUT | /api/learning/calendar/{study_date} | Mark or unmark a date on/after roadmap creation; completed entries store minutes and a note |
+| PUT | /api/learning/calendar/preferences | Set the missed-consecutive-days threshold (1–30) and timezone for in-app reminders |
+| GET | /api/alerts | List the signed-in user's learning alerts and unread count |
+| PUT | /api/alerts/{alert_id}/read | Mark an owned learning alert as read |
+
+Missed-day alerts are generated in-app when the calendar or alerts are opened. Study records are scoped to the authenticated user and their latest roadmap.
 
 ## CAREER MENTOR (CHAT)
 
@@ -72,7 +86,7 @@ Base path: `/api`. All responses are JSON. Protected endpoints require `Authoriz
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| GET | /api/progress | IMPLEMENTED | Dashboard summary (profile, resume, roadmap, interview status) |
+| GET | /api/progress | IMPLEMENTED | Dashboard summary, including assessment-verified skills |
 
 ## SYSTEM
 

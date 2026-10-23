@@ -266,3 +266,69 @@ async def test_toggle_task_route():
     data = response.json()
     assert "task-1" in data["completed_tasks"]
     app.dependency_overrides.clear()
+
+
+def test_roadmap_completed_and_verified_tasks_union():
+    """Verify that serialization and progress calculation use the UNION of completed_tasks and verified_tasks."""
+    from app.services.progress_service import _build_roadmap_progress
+    from app.services.roadmap_service import _serialize
+
+    content = RoadmapContent(
+        title="Test Track",
+        target_role="Engineer",
+        phases=[
+            RoadmapPhase(
+                phase_number=1,
+                name="Phase 1",
+                duration_weeks=4,
+                tasks=[
+                    RoadmapTask(id="task-1", title="Task 1", skill="Python", description="d", action="a", milestone="m"),
+                    RoadmapTask(id="task-2", title="Task 2", skill="Docker", description="d", action="a", milestone="m"),
+                    RoadmapTask(id="task-3", title="Task 3", skill="FastAPI", description="d", action="a", milestone="m"),
+                ],
+            )
+        ],
+    )
+
+    # 1. Legacy roadmap (completed_tasks only)
+    legacy_doc = {
+        "_id": ObjectId(),
+        "user_id": ObjectId(),
+        "target_role": "Engineer",
+        "completed_tasks": ["task-1"],
+        "roadmap": content.model_dump(),
+    }
+    legacy_res = _serialize(legacy_doc, content)
+    assert legacy_res.completed_tasks == ["task-1"]
+    legacy_prog = _build_roadmap_progress(legacy_doc)
+    assert legacy_prog.completed_tasks_count == 1
+    assert legacy_prog.total_tasks == 3
+
+    # 2. New roadmap (verified_tasks only)
+    new_doc = {
+        "_id": ObjectId(),
+        "user_id": ObjectId(),
+        "target_role": "Engineer",
+        "verified_tasks": ["task-2"],
+        "roadmap": content.model_dump(),
+    }
+    new_res = _serialize(new_doc, content)
+    assert new_res.completed_tasks == ["task-2"]
+    new_prog = _build_roadmap_progress(new_doc)
+    assert new_prog.completed_tasks_count == 1
+
+    # 3. Mixed roadmap (both lists present with overlapping task-2)
+    mixed_doc = {
+        "_id": ObjectId(),
+        "user_id": ObjectId(),
+        "target_role": "Engineer",
+        "completed_tasks": ["task-1", "task-2"],
+        "verified_tasks": ["task-2", "task-3"],
+        "roadmap": content.model_dump(),
+    }
+    mixed_res = _serialize(mixed_doc, content)
+    assert set(mixed_res.completed_tasks) == {"task-1", "task-2", "task-3"}
+    assert len(mixed_res.completed_tasks) == 3
+    mixed_prog = _build_roadmap_progress(mixed_doc)
+    assert mixed_prog.completed_tasks_count == 3
+    assert mixed_prog.completion_percentage == 100

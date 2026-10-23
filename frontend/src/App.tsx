@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
 import { AppLayout } from './layouts/AppLayout'
 import { CareerMentorPage } from './pages/CareerMentorPage'
+import { LearningAlertsPage } from './pages/LearningAlertsPage'
 import { DesignSystemPage } from './pages/DesignSystemPage'
 import { LoginPage } from './pages/LoginPage'
 import { MockInterviewPage } from './pages/MockInterviewPage'
@@ -16,6 +17,7 @@ import { RegisterPage } from './pages/RegisterPage'
 import { ResumeAnalyzerPage } from './pages/ResumeAnalyzerPage'
 import { RoadmapPage } from './pages/RoadmapPage'
 import { SkillGapPage } from './pages/SkillGapPage'
+import { StudyCalendarPage } from './pages/StudyCalendarPage'
 
 function App() {
   return (
@@ -125,6 +127,22 @@ function App() {
                 element={
                   <ErrorBoundary fallbackTitle="Roadmap Error">
                     <RoadmapPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/alerts"
+                element={
+                  <ErrorBoundary fallbackTitle="Learning Alerts Error">
+                    <LearningAlertsPage />
+                  </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/calendar"
+                element={
+                  <ErrorBoundary fallbackTitle="Learning Calendar Error">
+                    <StudyCalendarPage />
                   </ErrorBoundary>
                 }
               />

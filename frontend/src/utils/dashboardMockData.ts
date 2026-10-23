@@ -50,6 +50,10 @@ export const MOCK_FULL_DATA: MockDashboardState = {
       total_interviews: 4,
       target_role: 'Senior AI Engineer',
     },
+    verified_skills: [
+      { name: 'Python', score: 92, verified_at: '2026-10-20T12:00:00Z' },
+      { name: 'FastAPI', score: 88, verified_at: '2026-10-21T12:00:00Z' },
+    ],
     readiness_score: 86,
     overall_progress: 86,
     next_steps: [
@@ -207,6 +211,7 @@ export const MOCK_PARTIAL_DATA: MockDashboardState = {
       total_interviews: 0,
       target_role: '',
     },
+    verified_skills: [],
     readiness_score: 32,
     overall_progress: 32,
     next_steps: [
@@ -279,6 +284,7 @@ export const MOCK_NEW_USER_DATA: MockDashboardState = {
       total_interviews: 0,
       target_role: '',
     },
+    verified_skills: [],
     readiness_score: 0,
     overall_progress: 0,
     next_steps: [

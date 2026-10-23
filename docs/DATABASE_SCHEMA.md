@@ -1,6 +1,6 @@
-# CareerPilot AI — Database Schema (Planned)
+# CareerPilot AI — Database Schema
 
-> STATUS: PLANNED — documentation only. No application models or production data are created yet.
+> MongoDB collections are created by the application as features are used. Documents are scoped to `user_id`.
 
 Database: **MongoDB** (accessed via Motor async driver). All documents are scoped to a `user_id` for ownership and authorization.
 
@@ -69,6 +69,37 @@ Database: **MongoDB** (accessed via Motor async driver). All documents are scope
 | readiness_score | int | latest resume score 0–100 |
 | last_updated | datetime | |
 
+### learning_assessments
+| Field | Type | Notes |
+|-------|------|-------|
+| user_id | ObjectId | Owner from authenticated JWT |
+| roadmap_id | ObjectId | Roadmap containing the assessed task |
+| task_id | string | Task identifier |
+| skill | string | Skill being assessed |
+| questions | object[] | Questions and server-only answer key |
+| status | string | `in_progress` or `completed` |
+| score / passed | int / bool | Server-calculated score and 70% pass result |
+| completed_at | datetime | Submission time |
+
+### verified_skills
+| Field | Type | Notes |
+|-------|------|-------|
+| user_id | ObjectId | Owner from authenticated JWT |
+| skill_key | string | Case-insensitive per-user unique key |
+| name | string | Roadmap skill passed by the user |
+| score | int | Passing assessment score (70–100) |
+| verified_at | datetime | Latest successful verification |
+
+### learning_alerts
+| Field | Type | Notes |
+|-------|------|-------|
+| user_id | ObjectId | Owner from authenticated JWT |
+| title / message | string | Assessment outcome notification |
+| category | string | `skill_verified` or `assessment_retry` |
+| is_read | bool | In-app read state |
+| email_status | string | SMTP result or `not_configured` |
+| created_at | datetime | Alert timestamp |
+
 ### conversations
 | Field | Type | Notes |
 |-------|------|-------|
@@ -85,4 +116,4 @@ Database: **MongoDB** (accessed via Motor async driver). All documents are scope
 
 - Do NOT create production data or dummy records.
 - Do NOT implement models in this task (they don't exist yet).
-- Index `users.email` (unique) and `user_id` on every collection.
+- Learning collections are indexed by `user_id`; verified skills are unique by user and normalized skill name.

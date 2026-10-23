@@ -24,6 +24,7 @@ from app.schemas.progress import (
     RoadmapProgress,
 )
 from app.schemas.resume import ResumeAnalysis
+from app.services.learning_service import get_verified_skills
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ async def get_dashboard(user_id: str) -> DashboardResponse:
         latest_roadmap_doc,
         latest_interview_doc,
         total_interviews,
+        verified_skills,
     ) = await asyncio.gather(
         _fetch_profile(oid),
         _fetch_latest_resume(oid),
@@ -62,6 +64,7 @@ async def get_dashboard(user_id: str) -> DashboardResponse:
         _fetch_latest_roadmap(oid),
         _fetch_latest_interview(oid),
         _count_interviews(oid),
+        get_verified_skills(str(oid)),
     )
 
     profile_progress = _build_profile_progress(profile_doc)
@@ -86,6 +89,7 @@ async def get_dashboard(user_id: str) -> DashboardResponse:
         resume=resume_progress,
         roadmap=roadmap_progress,
         interview=interview_progress,
+        verified_skills=verified_skills,
         readiness_score=readiness_score,
         overall_progress=overall_progress,
         next_steps=next_steps,
@@ -179,7 +183,9 @@ def _build_roadmap_progress(doc: dict | None) -> RoadmapProgress:
         tasks = phase.get("tasks", []) if isinstance(phase, dict) else getattr(phase, "tasks", [])
         total_tasks += len(tasks)
 
-    completed_tasks = doc.get("completed_tasks", [])
+    verified = doc.get("verified_tasks", []) or []
+    completed = doc.get("completed_tasks", []) or []
+    completed_tasks = list(dict.fromkeys(list(verified) + list(completed)))
     completed_count = len(completed_tasks)
     percentage = round((completed_count / total_tasks * 100)) if total_tasks > 0 else 0
 
@@ -360,4 +366,3 @@ async def _count_interviews(oid: ObjectId) -> int:
         )
     except Exception:
         return 0
-

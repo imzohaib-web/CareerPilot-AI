@@ -275,6 +275,7 @@ async def test_contract_progress_no_data():
                 "resume",
                 "roadmap",
                 "interview",
+                "verified_skills",
                 "readiness_score",
                 "overall_progress",
                 "next_steps",
@@ -940,3 +941,108 @@ async def test_contract_interview_latest_completed():
             }
             assert isinstance(feedback["recommended_actions"], list)
             assert isinstance(feedback["rubric_sources"], list)
+
+
+@pytest.mark.asyncio
+async def test_contract_learning_alerts():
+    """Assert exact JSON shape for GET /api/alerts."""
+    from app.schemas.learning import LearningAlert, LearningAlertsResponse
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(_override_user())
+
+    now = datetime.now(timezone.utc)
+    mock_alerts = LearningAlertsResponse(
+        alerts=[
+            LearningAlert(
+                id=str(ObjectId()),
+                title="Skill verified: FastAPI",
+                message="You scored 80% on FastAPI assessment.",
+                category="skill_verified",
+                is_read=False,
+                email_status="sent",
+                created_at=now,
+            )
+        ],
+        unread_count=1,
+    )
+
+    with patch("app.services.study_tracker_service.refresh_missed_alert", new_callable=AsyncMock), \
+         patch("app.services.learning_service.get_alerts", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_alerts
+        async with _make_client() as client:
+            resp = await client.get("/api/alerts")
+            assert resp.status_code == 200
+            data = resp.json()
+
+            assert set(data.keys()) == {"alerts", "unread_count"}
+            assert isinstance(data["alerts"], list)
+            assert isinstance(data["unread_count"], int)
+            alert = data["alerts"][0]
+            assert set(alert.keys()) == {
+                "id",
+                "title",
+                "message",
+                "category",
+                "is_read",
+                "email_status",
+                "created_at",
+            }
+            assert isinstance(alert["id"], str)
+            assert isinstance(alert["title"], str)
+            assert isinstance(alert["is_read"], bool)
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_contract_study_calendar():
+    """Assert exact JSON shape for GET /api/learning/calendar."""
+    from datetime import date
+    from app.schemas.study_tracker import StudyCalendarResponse, StudyDayRecord
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(_override_user())
+
+    mock_calendar = StudyCalendarResponse(
+        roadmap_id=str(ObjectId()),
+        roadmap_title="Full Stack Engineer",
+        roadmap_start_date=date(2026, 10, 1),
+        month="2026-10",
+        timezone="Asia/Karachi",
+        storage_mode="mongodb",
+        days=[
+            StudyDayRecord(
+                date=date(2026, 10, 20),
+                minutes=60,
+                note="Studied FastAPI routers",
+                updated_at=datetime.now(timezone.utc),
+            )
+        ],
+        missed_day_threshold=2,
+        active_missed_days=0,
+        missed_alert=None,
+    )
+
+    with patch("app.services.study_tracker_service.get_calendar", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_calendar
+        async with _make_client() as client:
+            resp = await client.get("/api/learning/calendar?month=2026-10&timezone=Asia/Karachi")
+            assert resp.status_code == 200
+            data = resp.json()
+
+            assert set(data.keys()) == {
+                "roadmap_id",
+                "roadmap_title",
+                "roadmap_start_date",
+                "month",
+                "timezone",
+                "storage_mode",
+                "days",
+                "missed_day_threshold",
+                "active_missed_days",
+                "missed_alert",
+            }
+            assert isinstance(data["days"], list)
+            day_rec = data["days"][0]
+            assert set(day_rec.keys()) == {"date", "minutes", "note", "updated_at"}
+    app.dependency_overrides.clear()

@@ -297,6 +297,20 @@ async def _ensure_indexes() -> None:
         await db.skill_gap_analyses.create_index("user_id")
         await db.conversations.create_index("user_id")
         await db.roadmaps.create_index("user_id")
+        await db.learning_assessments.create_index(
+            [("user_id", 1), ("created_at", -1)]
+        )
+        await db.verified_skills.create_index(
+            [("user_id", 1), ("skill_key", 1)], unique=True
+        )
+        await db.learning_alerts.create_index([("user_id", 1), ("created_at", -1)])
+        await db.learning_alerts.create_index(
+            [("user_id", 1), ("dedupe_key", 1)], unique=True, sparse=True
+        )
+        await db.learning_days.create_index(
+            [("user_id", 1), ("roadmap_id", 1), ("date", 1)], unique=True
+        )
+        await db.learning_preferences.create_index("user_id", unique=True)
         await db.interviews.create_index("user_id")
         await db.rag_documents.create_index("user_id")
         await db.rag_chunks.create_index([("document_id", 1), ("user_id", 1)])

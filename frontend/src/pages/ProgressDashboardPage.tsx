@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   Check,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 import { describeApiError } from '../services/apiClient'
 import * as progressService from '../services/progress'
 import * as roadmapService from '../services/roadmap'
@@ -114,6 +115,8 @@ function computePace(completedCount: number, totalCount: number): WeekPace {
 
 export function ProgressDashboardPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const { showToast } = useToast()
 
   // State
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -128,9 +131,6 @@ export function ProgressDashboardPage() {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const demoMode = searchParams.get('demo') // 'full' | 'partial' | 'new-user' | 'error' | null
-
-  // Optimistic toggling tracker
-  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
 
   // Fetch all dashboard data concurrently with graceful partial failure
   const loadDashboardData = useCallback(async (isRefresh = false) => {
@@ -277,6 +277,33 @@ export function ProgressDashboardPage() {
           }
         : null,
     })
+  }, [dashboard])
+
+  const allSkills = useMemo(() => {
+    if (!dashboard) return []
+    const seen = new Set<string>()
+    const skills: { name: string; source: 'profile' | 'resume' | 'verified'; score?: number }[] = []
+    const addSkill = (
+      name: string,
+      source: 'profile' | 'resume' | 'verified',
+      score?: number,
+    ) => {
+      const normalized = name.trim()
+      const key = normalized.toLowerCase()
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      skills.push({ name: normalized, source, score })
+    }
+    for (const skill of dashboard.verified_skills ?? []) {
+      addSkill(skill.name, 'verified', skill.score)
+    }
+    for (const skill of dashboard.resume.skills_detected ?? []) {
+      addSkill(skill, 'resume')
+    }
+    for (const skill of dashboard.profile.skills ?? []) {
+      addSkill(skill, 'profile')
+    }
+    return skills
   }, [dashboard])
 
   const animatedScore = useCountUp(readiness.score, 800)
@@ -431,41 +458,24 @@ export function ProgressDashboardPage() {
     return computePace(weekCompletedCount, thisWeekTasks.length)
   }, [weekCompletedCount, thisWeekTasks.length])
 
-  // Optimistic task toggling
+  // Skill verification navigation & task handler
   const handleToggleTask = async (task: RoadmapTask) => {
-    if (!roadmap || togglingTaskId) return
-
+    if (!roadmap) return
     const isCompleted = roadmap.completed_tasks.includes(task.id)
-    const newCompleted = !isCompleted
-
-    setTogglingTaskId(task.id)
-
-    // Optimistic UI state update
-    setRoadmap((prev) => {
-      if (!prev) return prev
-      const newCompletedTasks = newCompleted
-        ? [...prev.completed_tasks, task.id]
-        : prev.completed_tasks.filter((id) => id !== task.id)
-      return { ...prev, completed_tasks: newCompletedTasks }
-    })
-
-    try {
-      const updated = await roadmapService.toggleRoadmapTask(roadmap.id, task.id, newCompleted)
-      setRoadmap(updated)
-      // Re-fetch dashboard silently in background to update overall progress
-      progressService.fetchDashboard().then(setDashboard).catch(() => {})
-    } catch {
-      // Rollback on failure
-      setRoadmap((prev) => {
-        if (!prev) return prev
-        const reverted = isCompleted
-          ? [...prev.completed_tasks, task.id]
-          : prev.completed_tasks.filter((id) => id !== task.id)
-        return { ...prev, completed_tasks: reverted }
+    if (isCompleted) {
+      showToast({
+        variant: 'info',
+        title: 'Skill Verified',
+        message: 'This task has been verified through a passed skill assessment.',
       })
-    } finally {
-      setTogglingTaskId(null)
+      return
     }
+    showToast({
+      variant: 'info',
+      title: 'Skill Assessment Required',
+      message: 'Pass the roadmap skill assessment to complete this task.',
+    })
+    navigate('/roadmap')
   }
 
   // ── 6. Skills Snapshot (Top 5 Missing Skills) ─────────────────────────────
@@ -1101,23 +1111,20 @@ export function ProgressDashboardPage() {
                   />
                 </div>
 
-                {/* Task List with Optimistic Checkbox */}
+                {/* Task List with Skill-Verification Action */}
                 <div className="space-y-2 pt-1">
                   {thisWeekTasks.map((task) => {
                     const isDone = roadmap.completed_tasks.includes(task.id)
-                    const isToggling = togglingTaskId === task.id
 
                     return (
                       <div
                         key={task.id}
                         onClick={() => handleToggleTask(task)}
-                        className={`flex items-start gap-2.5 rounded-lg border p-2 cursor-pointer transition ${
+                        className={`flex items-center justify-between gap-2.5 rounded-lg border p-2.5 cursor-pointer transition ${
                           isDone
                             ? 'bg-slate-50 border-slate-200 opacity-80'
                             : 'bg-white border-slate-200/90 hover:border-brand-300 hover:bg-brand-50/20'
-                        } ${isToggling ? 'opacity-50 pointer-events-none' : ''}`}
-                        role="checkbox"
-                        aria-checked={isDone}
+                        }`}
                         tabIndex={0}
                         onKeyDown={(e) => {
                           if (e.key === ' ' || e.key === 'Enter') {
@@ -1126,30 +1133,42 @@ export function ProgressDashboardPage() {
                           }
                         }}
                       >
-                        <div
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
-                            isDone
-                              ? 'bg-emerald-600 border-emerald-600 text-white'
-                              : 'border-slate-300 bg-white'
-                          }`}
-                        >
-                          {isDone && <Check className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-xs font-medium leading-snug line-clamp-1 ${
-                              isDone ? 'text-slate-400 line-through' : 'text-slate-800'
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                              isDone
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : 'border-slate-300 bg-white'
                             }`}
                           >
-                            {task.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
-                            <span>{task.skill || 'Skill Target'}</span>
-                            <span>•</span>
-                            <span>{task.estimated_hours}h</span>
+                            {isDone && <Check className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-xs font-medium leading-snug line-clamp-1 ${
+                                isDone ? 'text-slate-400 line-through' : 'text-slate-800'
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                              <span>{task.skill || 'Skill Target'}</span>
+                              <span>•</span>
+                              <span>{task.estimated_hours}h</span>
+                            </div>
                           </div>
                         </div>
+
+                        {isDone ? (
+                          <span className="shrink-0 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white hover:bg-slate-700 transition">
+                            Test Skill <ArrowRight className="h-2.5 w-2.5" />
+                          </span>
+                        )}
                       </div>
                     )
                   })}
@@ -1367,6 +1386,61 @@ export function ProgressDashboardPage() {
               <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>
           </div>
+        </Card>
+      </section>
+
+      <section aria-label="Learning tracker and skills" className="grid gap-5 lg:grid-cols-3">
+        <Card variant="default" className="lg:col-span-2 p-5 shadow-card">
+          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Skills inventory</h3>
+              <p className="text-xs text-slate-500">
+                Skills from your profile, resume, and completed assessments.
+              </p>
+            </div>
+            <Badge variant="neutral" size="sm">{allSkills.length} total</Badge>
+          </div>
+          {allSkills.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {allSkills.map((skill) => (
+                <span
+                  key={skill.name}
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+                    skill.source === 'verified'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : skill.source === 'resume'
+                        ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  {skill.source === 'verified' ? `✓ ${skill.name} · ${skill.score}%` : skill.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">
+              Add skills in your profile or upload a resume to build your inventory.
+            </p>
+          )}
+        </Card>
+
+        <Card variant="default" className="flex flex-col justify-between p-5 shadow-card">
+          <div>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-brand-600" aria-hidden="true" />
+              <h3 className="text-sm font-semibold text-slate-900">Learning consistency</h3>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Mark each day you study, track time spent, and get an in-app reminder after missed days.
+            </p>
+          </div>
+          <Link
+            to="/calendar"
+            className="mt-4 inline-flex min-h-10 items-center justify-between gap-2 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white transition hover:bg-brand-700"
+          >
+            Open learning calendar
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
         </Card>
       </section>
 

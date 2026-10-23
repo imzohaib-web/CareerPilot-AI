@@ -215,9 +215,97 @@ export interface DashboardResponse {
   resume: ResumeProgress
   roadmap?: RoadmapProgress
   interview?: InterviewProgress
+  verified_skills: VerifiedSkill[]
   readiness_score: number
   overall_progress: number
   next_steps: NextStep[]
+}
+
+export interface VerifiedSkill {
+  name: string
+  score: number
+  verified_at: string
+}
+
+export interface SkillQuizQuestion {
+  id: string
+  question: string
+  options: string[]
+}
+
+export interface SkillQuizResponse {
+  id: string
+  roadmap_id: string
+  task_id: string
+  skill: string
+  questions: SkillQuizQuestion[]
+}
+
+export interface SkillQuizAnswer {
+  question_id: string
+  selected_option: number
+}
+
+export interface SkillQuizResult {
+  id: string
+  task_id: string
+  skill: string
+  score: number
+  passed: boolean
+  correct_answers: number
+  total_questions: number
+  completed_at: string
+}
+
+export interface LearningAlert {
+  id: string
+  title: string
+  message: string
+  category: string
+  is_read: boolean
+  email_status: string
+  created_at: string
+}
+
+export interface LearningAlertsResponse {
+  alerts: LearningAlert[]
+  unread_count: number
+}
+
+export interface StudyDayRecord {
+  date: string
+  minutes: number
+  note: string
+  updated_at: string
+}
+
+export interface StudyCalendarResponse {
+  roadmap_id: string
+  roadmap_title: string
+  roadmap_start_date: string
+  month: string
+  timezone: string
+  storage_mode: 'mongodb' | 'memory'
+  days: StudyDayRecord[]
+  missed_day_threshold: number
+  active_missed_days: number
+  missed_alert: string | null
+}
+
+export interface StudyDayUpdate {
+  completed: boolean
+  minutes: number
+  note: string
+}
+
+export interface StudyPreferencesUpdate {
+  missed_day_threshold: number
+  timezone: string
+}
+
+export interface StudyPreferencesResponse {
+  missed_day_threshold: number
+  timezone: string
 }
 
 // ── Mock Interview ───────────────────────────────────────────────────────
