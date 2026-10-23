@@ -25,4 +25,6 @@ services:
         value: "60"
       - key: RESUME_MAX_SIZE_MB
         value: "5"
+      - key: ALLOWED_DEMO_USERS
+        value: "demo@careerpilot.ai,umerzohaibumer@gmail.com"
     healthCheckPath: /api/health
