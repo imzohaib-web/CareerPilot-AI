@@ -32,6 +32,7 @@ PASS_THRESHOLD = 70
 _offline_assessments: dict[str, dict] = {}
 _offline_verified: dict[str, list[dict]] = {}
 _offline_alerts: dict[str, list[dict]] = {}
+_background_tasks: set[asyncio.Task] = set()
 
 _QUIZ_PROMPT = """\
 Create exactly ten practical multiple-choice questions that assess whether a learner
@@ -403,9 +404,11 @@ async def _create_alert(
         _offline_alerts.setdefault(user_id, []).insert(0, doc)
 
     if config.SMTP_HOST and config.SMTP_SENDER:
-        asyncio.create_task(
+        task = asyncio.create_task(
             _send_alert_email_background(doc["_id"], doc["user_id"], email, title, message)
         )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
 
 async def _send_alert_email_background(

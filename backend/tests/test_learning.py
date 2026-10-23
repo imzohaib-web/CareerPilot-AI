@@ -1,6 +1,6 @@
-"""Tests for roadmap assessment, verified skill, and alert workflows."""
-
+import asyncio
 import json
+import smtplib
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -246,7 +246,8 @@ async def test_smtp_alert_handling_without_credentials_and_nonblocking(
     assert len(alerts.alerts) >= 1
     assert alerts.alerts[0].email_status == "not_configured"
 
-    # 2. When SMTP is configured, confirm non-blocking background dispatch
+    # 2. When SMTP is configured, confirm non-blocking background dispatch via asyncio.to_thread
+    # and retention in _background_tasks set
     monkeypatch.setattr(config, "SMTP_HOST", "smtp.example.com")
     monkeypatch.setattr(config, "SMTP_SENDER", "alerts@careerpilot.ai")
     monkeypatch.setattr(config, "SMTP_PORT", 587)
@@ -254,18 +255,40 @@ async def test_smtp_alert_handling_without_credentials_and_nonblocking(
     monkeypatch.setattr(config, "SMTP_PASSWORD", "secret_pass")
 
     email_sent = False
+    thread_dispatched = False
 
     def mock_send(rec, subj, body):
         nonlocal email_sent
         email_sent = True
-        # Ensure password is never in subject or body
+        # Ensure credentials are never in subject or body
         assert "secret_pass" not in body
         assert "secret_pass" not in subj
 
+    orig_to_thread = asyncio.to_thread
+
+    async def mock_to_thread(func, *args, **kwargs):
+        nonlocal thread_dispatched
+        thread_dispatched = True
+        return await orig_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", mock_to_thread)
     monkeypatch.setattr(learning_service, "_send_email", mock_send)
     await learning_service._create_alert(
         learning_user, "learner@example.com", "Test Title", "Test Message", "test_category"
     )
-    import asyncio
     await asyncio.sleep(0.05)
     assert email_sent is True
+    assert thread_dispatched is True
+    # Ensure task was tracked and cleaned up on completion
+    assert len(learning_service._background_tasks) == 0
+
+    # 3. Confirm SMTP exception is caught cleanly without leaking credentials
+    def mock_send_fail(rec, subj, body):
+        raise smtplib.SMTPAuthenticationError(535, b"secret_pass failed")
+
+    monkeypatch.setattr(learning_service, "_send_email", mock_send_fail)
+    await learning_service._create_alert(
+        learning_user, "learner@example.com", "Fail Title", "Fail Message", "test_category"
+    )
+    await asyncio.sleep(0.05)
+    assert len(learning_service._background_tasks) == 0
