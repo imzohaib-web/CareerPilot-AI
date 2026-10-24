@@ -278,7 +278,7 @@ export function RegisterPage() {
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
             onBlur={handleNameBlur}
-            placeholder="Alex Johnson"
+            placeholder="Enter your full name"
             aria-required="true"
             aria-invalid={Boolean(nameError)}
             aria-describedby={nameError ? 'register-name-error' : undefined}
@@ -317,7 +317,7 @@ export function RegisterPage() {
             value={email}
             onChange={(e) => handleEmailChange(e.target.value)}
             onBlur={handleEmailBlur}
-            placeholder="alex.johnson@example.com"
+            placeholder="Enter your email address"
             aria-required="true"
             aria-invalid={Boolean(emailError || serverError?.isConflict)}
             aria-describedby={emailError ? 'register-email-error' : undefined}
@@ -357,7 +357,7 @@ export function RegisterPage() {
               value={password}
               onChange={(e) => handlePasswordChange(e.target.value)}
               onBlur={handlePasswordBlur}
-              placeholder="••••••••"
+              placeholder="Create a password"
               aria-required="true"
               aria-invalid={Boolean(passwordError)}
               aria-describedby={password.length > 0 ? 'password-hint' : undefined}
@@ -439,7 +439,7 @@ export function RegisterPage() {
               value={confirmPassword}
               onChange={(e) => handleConfirmPasswordChange(e.target.value)}
               onBlur={handleConfirmPasswordBlur}
-              placeholder="••••••••"
+              placeholder="Re-enter your password"
               aria-required="true"
               aria-invalid={Boolean(confirmPasswordError)}
               aria-describedby={

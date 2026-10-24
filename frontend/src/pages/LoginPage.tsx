@@ -166,7 +166,7 @@ export function LoginPage() {
             value={email}
             onChange={(e) => handleEmailChange(e.target.value)}
             onBlur={handleEmailBlur}
-            placeholder="alex.johnson@example.com"
+            placeholder="Enter your email address"
             aria-required="true"
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'login-email-error' : undefined}
@@ -205,7 +205,7 @@ export function LoginPage() {
               value={password}
               onChange={(e) => handlePasswordChange(e.target.value)}
               onBlur={handlePasswordBlur}
-              placeholder="••••••••"
+              placeholder="Enter your password"
               aria-required="true"
               aria-invalid={Boolean(passwordError)}
               aria-describedby={passwordError ? 'login-password-error' : undefined}
