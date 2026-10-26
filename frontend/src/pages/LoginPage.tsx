@@ -28,13 +28,18 @@ export function LoginPage() {
   // Server error banner
   const [serverError, setServerError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isWakingUp, setIsWakingUp] = useState(false)
   const [retrySeconds, setRetrySeconds] = useState<number>(0)
 
   const emailInputRef = useRef<HTMLInputElement>(null)
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Autofocus first field on mount
   useEffect(() => {
     emailInputRef.current?.focus()
+    return () => {
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+    }
   }, [])
 
   // Retry countdown timer for 429 rate limit
@@ -47,7 +52,7 @@ export function LoginPage() {
   }, [retrySeconds])
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
   function validateEmail(val: string): string | null {
@@ -114,10 +119,16 @@ export function LoginPage() {
 
     setServerError(null)
     setIsSubmitting(true)
+    setIsWakingUp(false)
+
+    if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+    wakeTimerRef.current = setTimeout(() => {
+      setIsWakingUp(true)
+    }, 4000)
 
     try {
       await login(email.trim(), password)
-      navigate('/', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       const errInfo = describeApiError(err)
 
@@ -136,6 +147,8 @@ export function LoginPage() {
         setServerError(errInfo.message || 'Something went wrong. Please try again.')
       }
     } finally {
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+      setIsWakingUp(false)
       setIsSubmitting(false)
     }
   }
@@ -269,6 +282,17 @@ export function LoginPage() {
             <span>Sign in</span>
           )}
         </button>
+
+        {/* 4-Second Demo Server Cold Start Notice */}
+        {isWakingUp && isSubmitting && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-slate-500 text-center animate-fade-in"
+          >
+            Waking up the demo server. This can take up to a minute.
+          </p>
+        )}
 
         {/* Secondary Action: Plain Text Link */}
         <p className="text-center text-xs text-slate-500 pt-3">

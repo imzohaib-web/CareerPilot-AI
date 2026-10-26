@@ -37,16 +37,21 @@ export function RegisterPage() {
   // Server error banner
   const [serverError, setServerError] = useState<{ message: string; isConflict?: boolean } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isWakingUp, setIsWakingUp] = useState(false)
   const [retrySeconds, setRetrySeconds] = useState<number>(0)
 
   const nameInputRef = useRef<HTMLInputElement>(null)
   const emailInputRef = useRef<HTMLInputElement>(null)
   const passwordInputRef = useRef<HTMLInputElement>(null)
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null)
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Autofocus first field on mount
   useEffect(() => {
     nameInputRef.current?.focus()
+    return () => {
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+    }
   }, [])
 
   // Retry countdown timer for 429
@@ -59,7 +64,7 @@ export function RegisterPage() {
   }, [retrySeconds])
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
   // Backend validation rules (schemas/auth.py: min 8, max 72)
@@ -206,11 +211,17 @@ export function RegisterPage() {
 
     setServerError(null)
     setIsSubmitting(true)
+    setIsWakingUp(false)
+
+    if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+    wakeTimerRef.current = setTimeout(() => {
+      setIsWakingUp(true)
+    }, 4000)
 
     // Client-side only confirm check; backend receives strictly { name, email, password }
     try {
       await register(name.trim(), email.trim(), password)
-      navigate('/', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       const errInfo = describeApiError(err)
 
@@ -244,6 +255,8 @@ export function RegisterPage() {
         })
       }
     } finally {
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
+      setIsWakingUp(false)
       setIsSubmitting(false)
     }
   }
@@ -534,6 +547,17 @@ export function RegisterPage() {
             <span>Create account</span>
           )}
         </button>
+
+        {/* 4-Second Demo Server Cold Start Notice */}
+        {isWakingUp && isSubmitting && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-slate-500 text-center animate-fade-in"
+          >
+            Waking up the demo server. This can take up to a minute.
+          </p>
+        )}
 
         {/* Secondary Action: Plain Text Link */}
         <p className="text-center text-xs text-slate-500 pt-3">
