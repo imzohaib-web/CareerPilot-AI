@@ -19,6 +19,43 @@ import { RoadmapPage } from './pages/RoadmapPage'
 import { SkillGapPage } from './pages/SkillGapPage'
 import { StudyCalendarPage } from './pages/StudyCalendarPage'
 
+import { LandingPage } from './pages/LandingPage'
+import { useAuth } from './context/AuthContext'
+import { getToken } from './services/apiClient'
+
+function LandingRoute() {
+  const { isAuthenticated, isRestoringSession, isWakingUp } = useAuth()
+  const hasTokenHint = Boolean(getToken())
+
+  // If a login hint is present and session restoration is actively in progress,
+  // do not flash the public landing page to returning visitors.
+  if (hasTokenHint && isRestoringSession) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 text-slate-500 p-4 text-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-brand-600" />
+        <span className="text-sm font-medium text-slate-700">Loading session…</span>
+        {isWakingUp && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-slate-500 max-w-xs animate-fade-in"
+          >
+            Waking up the demo server. This can take up to a minute.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // Authenticated visitors visiting / are redirected to the existing dashboard
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  // Logged-out visitors render the public landing page immediately without any API request
+  return <LandingPage />
+}
+
 function App() {
   return (
     <ErrorBoundary fallbackTitle="Application Error" fallbackMessage="CareerPilot AI encountered an unexpected error.">
@@ -26,6 +63,16 @@ function App() {
         <ToastProvider>
           <BrowserRouter>
           <Routes>
+            {/* Public Landing Route */}
+            <Route
+              path="/"
+              element={
+                <ErrorBoundary fallbackTitle="Landing Error">
+                  <LandingRoute />
+                </ErrorBoundary>
+              }
+            />
+
             <Route
               path="/login"
               element={
@@ -91,7 +138,7 @@ function App() {
               }
             >
               <Route
-                path="/"
+                path="/dashboard"
                 element={
                   <ErrorBoundary fallbackTitle="Dashboard Error">
                     <ProgressDashboardPage />

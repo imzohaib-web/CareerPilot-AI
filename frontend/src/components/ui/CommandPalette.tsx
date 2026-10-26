@@ -72,7 +72,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         category: 'Navigation',
         icon: LayoutDashboard,
         keywords: ['home', 'overview', 'stats', 'readiness'],
-        perform: () => navigate('/'),
+        perform: () => navigate('/dashboard'),
       },
       {
         id: 'nav-profile',

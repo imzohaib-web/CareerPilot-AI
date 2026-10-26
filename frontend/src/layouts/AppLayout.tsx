@@ -50,7 +50,7 @@ const NAV_GROUPS: NavGroupDef[] = [
   {
     name: 'Overview',
     items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     ],
   },
   {
@@ -86,7 +86,7 @@ const NAV_GROUPS: NavGroupDef[] = [
 
 // Mobile bottom bar items (5 primary items)
 const MOBILE_BOTTOM_ITEMS: NavItemDef[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/roadmap', label: 'Roadmap', icon: Map },
   { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/mentor', label: 'Mentor', icon: MessageSquare },
@@ -859,6 +859,7 @@ export function AppLayout() {
 function getBreadcrumbsForPath(pathname: string): string[] {
   switch (pathname) {
     case '/':
+    case '/dashboard':
       return ['CareerPilot', 'Dashboard']
     case '/profile':
       return ['Build', 'Career Profile']
